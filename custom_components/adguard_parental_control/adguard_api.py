@@ -43,6 +43,7 @@ class AdGuardHomeAPI:
         method: str,
         path: str,
         json: Any = None,
+        params: dict[str, Any] | None = None,
     ) -> Any:
         url = self._url(path)
         kwargs: dict[str, Any] = {
@@ -51,6 +52,8 @@ class AdGuardHomeAPI:
         }
         if json is not None:
             kwargs["json"] = json
+        if params:
+            kwargs["params"] = {k: v for k, v in params.items() if v is not None and v != ""}
         try:
             async with self._session.request(method, url, **kwargs) as resp:
                 if resp.status == 401:
@@ -119,6 +122,42 @@ class AdGuardHomeAPI:
         except aiohttp.ClientError as err:
             _LOGGER.error("AdGuard login failed: %s", err)
             return False
+
+    # ── Query Log ─────────────────────────────────────────────
+
+    async def get_query_log(
+        self,
+        *,
+        search: str | None = None,
+        older_than: str | None = None,
+        response_status: str | None = None,
+        reason: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Get AdGuard Home DNS query log entries.
+
+        ``search`` can be a client IP or a domain.  ``older_than`` is the
+        cursor returned by AdGuard Home for pagination.  The current AGH API
+        also supports the ``reason`` filter; it is passed through when set.
+        """
+        params: dict[str, Any] = {
+            "search": search,
+            "older_than": older_than,
+            "response_status": response_status,
+        }
+        if reason:
+            params["reason"] = ",".join(reason)
+        data = await self._request("GET", "/control/querylog", params=params)
+        if not isinstance(data, dict):
+            return {"oldest": "", "data": []}
+        return {
+            "oldest": data.get("oldest", ""),
+            "data": data.get("data", []) if isinstance(data.get("data", []), list) else [],
+        }
+
+    async def get_querylog_info(self) -> dict[str, Any]:
+        """Get AdGuard Home query log configuration."""
+        data = await self._request("GET", "/control/querylog_info")
+        return data if isinstance(data, dict) else {}
 
     # ── Filtering / User Rules ────────────────────────────────
 

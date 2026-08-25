@@ -90,6 +90,28 @@ export interface ServiceInfo {
   blocked: boolean;
 }
 
+export interface QueryLogEntry {
+  time: string;
+  client: string;
+  client_id?: string;
+  member_client?: string;
+  question: { host: string; type: string; class?: string };
+  answer?: Array<{ type: string; value: string; ttl?: number }>;
+  elapsedMs?: string;
+  reason?: string;
+  rule?: string;
+  filterId?: number;
+  service_name?: string;
+  status?: string;
+  upstream?: string;
+  client_proto?: string;
+}
+
+export interface QueryLogResponse {
+  oldest: string;
+  data: QueryLogEntry[];
+}
+
 export interface Status {
   rules_count: number;
   overrides_count: number;
@@ -168,6 +190,20 @@ export class AdguardWebsocketApi {
 
   async deleteMember(memberId: string): Promise<void> {
     await this.hass.callWS({ type: "adguard_pc/members/delete", member_id: memberId });
+  }
+
+  // Member Query Log
+  async getMemberQueryLog(
+    memberId: string,
+    options: { limit?: number; search?: string; responseStatus?: string } = {}
+  ): Promise<QueryLogResponse> {
+    return this.hass.callWS({
+      type: "adguard_pc/members/querylog",
+      member_id: memberId,
+      limit: options.limit ?? 50,
+      search: options.search ?? "",
+      response_status: options.responseStatus ?? "",
+    });
   }
 
   // Clients

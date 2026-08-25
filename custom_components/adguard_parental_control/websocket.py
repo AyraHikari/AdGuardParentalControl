@@ -337,6 +337,95 @@ async def ws_members_delete(
     connection.send_result(msg["id"], None)
 
 
+# ── Member Query Log ───────────────────────────────────────
+
+@websocket_api.websocket_command(
+    {
+        "type": "adguard_pc/members/querylog",
+        "member_id": str,
+        "limit": int,
+        "search": str,
+        "response_status": str,
+    }
+)
+@websocket_api.async_response
+@_safe
+async def ws_members_querylog(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict
+) -> None:
+    """Return recent AdGuard DNS queries belonging to all clients of a member."""
+    coordinator = _get_coordinator(hass)
+    member = coordinator.state.find_member(msg["member_id"])
+    if member is None:
+        raise ValueError("Member not found")
+
+    limit = max(1, min(int(msg.get("limit", 50)), 200))
+    search = str(msg.get("search", "")).strip().lower()
+    response_status = str(msg.get("response_status", "")).strip() or None
+
+    # AGH query-log search understands client IPs. Query each configured
+    # client identity and merge the results so one member can have several
+    # devices without maintaining a duplicate local DNS log database.
+    queries: list[tuple[str, str]] = []
+    for client_name in member.client_names:
+        client = coordinator.state.find_client(client_name)
+        if not client:
+            continue
+        for identity in client.ids:
+            identity = str(identity).strip()
+            if identity:
+                queries.append((client_name, identity))
+
+    # If a member has no explicit IP identities, there is nothing reliable
+    # to filter on. This avoids accidentally returning another user's log.
+    if not queries:
+        connection.send_result(msg["id"], {"oldest": "", "data": []})
+        return
+
+    import asyncio
+
+    async def fetch(client_name: str, identity: str) -> tuple[str, str, dict]:
+        try:
+            data = await coordinator.api.get_query_log(
+                search=identity,
+                response_status=response_status,
+            )
+            return client_name, identity, data
+        except Exception as err:
+            _LOGGER.debug("Query log lookup failed for %s (%s): %s", client_name, identity, err)
+            return client_name, identity, {"oldest": "", "data": []}
+
+    results = await asyncio.gather(*(fetch(name, identity) for name, identity in queries))
+    merged: list[dict] = []
+    seen: set[tuple[str, str, str, str]] = set()
+    oldest_values: list[str] = []
+
+    for client_name, identity, payload in results:
+        if payload.get("oldest"):
+            oldest_values.append(payload["oldest"])
+        for item in payload.get("data", []):
+            if not isinstance(item, dict):
+                continue
+            host = str(item.get("question", {}).get("host", ""))
+            if search and search not in host.lower() and search not in str(item.get("client", "")).lower():
+                continue
+            # Keep a stable client name from our own inventory even when AGH
+            # returns the raw IP address.
+            item = {**item, "member_client": client_name, "client_id": identity}
+            key = (str(item.get("time", "")), host, str(item.get("client", "")), str(item.get("question", {}).get("type", "")))
+            if key not in seen:
+                seen.add(key)
+                merged.append(item)
+
+    merged.sort(key=lambda x: str(x.get("time", "")), reverse=True)
+    merged = merged[:limit]
+
+    # ``oldest`` is only meaningful for a subsequent page. For the merged
+    # multi-client view, use the oldest returned entry as a safe cursor.
+    cursor = min(oldest_values) if oldest_values else (str(merged[-1].get("time", "")) if merged else "")
+    connection.send_result(msg["id"], {"oldest": cursor, "data": merged})
+
+
 # ── Clients CRUD ──────────────────────────────────────────
 
 
@@ -609,6 +698,7 @@ _ALL_HANDLERS = [
     ws_members_create,
     ws_members_update,
     ws_members_delete,
+    ws_members_querylog,
     ws_clients_list,
     ws_clients_create,
     ws_clients_update,

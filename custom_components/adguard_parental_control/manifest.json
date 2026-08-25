@@ -1,9 +1,9 @@
 {
   "domain": "adguard_parental_control",
   "name": "AdGuard Parental Control",
-  "codeowners": ["@tedyr"],
+  "codeowners": ["@AyraHikari"],
   "config_flow": true,
-  "documentation": "https://github.com/tedyr/AdguardParentalControl",
+  "documentation": "https://github.com/AyraHikari/AdguardParentalControl",
   "iot_class": "local_polling",
   "requirements": [],
   "version": "0.1.0"
