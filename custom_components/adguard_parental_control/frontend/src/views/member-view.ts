@@ -93,7 +93,7 @@ export class MemberView extends LitElement {
           </div>
           <div class="hero-actions">
             <button class="btn" @click=${this._editMember}>✎ Edit Member</button>
-            <button class="icon-btn" title="Delete" @click=${() => { this._showDeleteConfirm = true; }}><ha-icon .path=${ICONS.trash}></ha-icon></button>
+            <button class="btn btn-hero-delete" @click=${() => { this._showDeleteConfirm = true; }}>Delete</button>
           </div>
         </section>
 
@@ -117,7 +117,7 @@ export class MemberView extends LitElement {
               </section>
 
               <section class="card stat-card">
-                <div class="section-title">Blocked Services</div>
+                <div class="section-title">Global Blocked Services</div>
                 <div class="service-line">
                   ${blocked.length ? blocked.slice(0, 4).map((s) => html`<span class="service blocked"><span class="service-dot">×</span>${s}</span>`) : html`<span class="muted">No explicit blocked services</span>`}
                   ${blocked.length > 4 ? html`<span class="more">+${blocked.length - 4}</span>` : ""}
@@ -224,7 +224,7 @@ export class MemberView extends LitElement {
         <div class="modal-scrim" @click=${() => this._showDeleteConfirm = false}></div>
         <div class="modal">
           <div class="modal-head"><h3>Delete member "${this.member.name}"?</h3></div>
-          <div class="modal-body"><p>This cannot be undone. Clients and policies will not be deleted.</p></div>
+          <div class="modal-body"><p>This action cannot be undone. Clients and policies will not be deleted.</p></div>
           <div class="modal-actions">
             <button class="btn" @click=${() => this._showDeleteConfirm = false}>Cancel</button>
             <button class="btn btn-danger" @click=${this._deleteMember}>Delete</button>
@@ -411,6 +411,8 @@ export class MemberView extends LitElement {
     .hero { min-height:108px; display:flex; align-items:center; padding:18px 20px; gap:18px; }
     .avatar { width:68px; height:68px; border-radius:50%; display:grid; place-items:center; background:linear-gradient(135deg,#3d67a9,#25355c); border:2px solid #536a95; font-size:28px; font-weight:800; }
     .hero-main { flex:1; min-width:0; }.title-line { display:flex; align-items:center; gap:12px; }.title-line h1 { margin:0; font-size:24px; }.hero-meta { display:flex; flex-wrap:wrap; gap:20px; color:#9aa6c0; font-size:12px; margin-top:12px; }.hero-actions { display:flex; gap:8px; align-self:flex-start; }
+    .btn-hero-delete { background:#451d24; color:#ff6875; border:1px solid #6b2832; border-radius:7px; padding:8px 11px; font:600 11px inherit; cursor:pointer; }
+    .btn-hero-delete:hover { background:#5c2430; }
     .layout { display:grid; grid-template-columns:minmax(0,1fr) 500px; gap:12px; margin-top:12px; align-items:start; }.main-column { min-width:0; }.grid-3 { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }.grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
     .stat-card { min-height:122px; padding:16px; }.section-title { font-size:13px; font-weight:700; margin-bottom:16px; }.status-row { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }.status-row strong { font-size:16px; }.yellow { color:#f3bd38; }.green-text { color:#2bd88f; }.subtext,.muted { color:#7e8aa4; font-size:12px; margin-top:10px; }.next-change { text-align:right; color:#7e8aa4; font-size:11px; }.next-change strong { display:block; color:#eef2ff; font-size:15px; margin-top:3px; }
     .service-line { display:flex; flex-wrap:wrap; gap:7px; align-items:center; }.service { display:inline-flex; align-items:center; gap:6px; padding:6px 8px; border-radius:8px; background:#11172a; border:1px solid #26304a; font-size:11px; }.service.allowed { color:#42e09a; }.service.blocked { color:#ff6464; }.service-dot { font-weight:900; }.more { font-size:11px; color:#7e8aa4; }

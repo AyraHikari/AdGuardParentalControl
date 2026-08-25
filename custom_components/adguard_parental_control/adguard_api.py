@@ -178,11 +178,16 @@ class AdGuardHomeAPI:
         return data.get("ids", [])
 
     async def set_blocked_services(self, services: list[str]) -> None:
-        await self._request("POST", "/control/blocked_services/set", {"ids": services})
+        await self._request("PUT", "/control/blocked_services/update", {"ids": services, "schedule": {}})
 
-    async def get_all_blocked_services(self) -> list[dict]:
+    async def get_all_blocked_services(self) -> dict:
+        """Return {blocked_services: [...], groups: [...]} from AGH API."""
         data = await self._request("GET", "/control/blocked_services/all")
-        return data if isinstance(data, list) else []
+        if isinstance(data, dict):
+            return data
+        if isinstance(data, list):
+            return {"blocked_services": data, "groups": []}
+        return {"blocked_services": [], "groups": []}
 
     # ── Clients ───────────────────────────────────────────────
 

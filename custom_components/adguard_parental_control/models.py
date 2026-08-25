@@ -73,9 +73,14 @@ class PolicyRule:
     target: str  # domain, service name, or category
     action: PolicyAction
     rule_type: RuleType
+    is_regex: bool = False
 
     def to_adguard_rule(self) -> str:
         """Convert to AdGuard user rule syntax."""
+        if self.is_regex:
+            if self.action == PolicyAction.ALLOW:
+                return f"@@/{self.target}/"
+            return f"/{self.target}/"
         if self.rule_type == RuleType.SERVICE:
             if self.action == PolicyAction.ALLOW:
                 return f"@@||{self.target}^"
@@ -372,4 +377,5 @@ def _rule_from_dict(d: dict) -> PolicyRule:
         target=d["target"],
         action=PolicyAction(d["action"]),
         rule_type=RuleType(d["rule_type"]),
+        is_regex=bool(d.get("is_regex", False)),
     )

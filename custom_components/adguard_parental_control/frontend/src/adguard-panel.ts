@@ -68,6 +68,22 @@ export class AdguardPanel extends LitElement {
     try {
       this._state = await this._api.getState();
       this._lastSync = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      // Keep selected entities in sync with fresh state
+      if (this._selectedPolicy && this._state) {
+        this._selectedPolicy = this._state.policies.find((p: any) => p.id === this._selectedPolicy!.id) || this._selectedPolicy;
+      }
+      if (this._selectedClient && this._state) {
+        this._selectedClient = this._state.clients.find((c: any) => c.id === this._selectedClient!.id) || this._selectedClient;
+      }
+      if (this._selectedGroup && this._state) {
+        this._selectedGroup = this._state.groups.find((g: any) => g.id === this._selectedGroup!.id) || this._selectedGroup;
+      }
+      if (this._selectedMember && this._state) {
+        this._selectedMember = this._state.members.find((m: any) => m.id === this._selectedMember!.id) || this._selectedMember;
+      }
+      if (this._selectedProfile && this._state) {
+        this._selectedProfile = this._state.profiles.find((p: any) => p.id === this._selectedProfile!.id) || this._selectedProfile;
+      }
     } catch (err) {
       console.error("Failed to load state:", err);
     } finally {

@@ -9,6 +9,7 @@ export interface PolicyRule {
   target: string;
   action: "block" | "allow";
   rule_type: "domain" | "service" | "category";
+  is_regex?: boolean;
 }
 
 export interface TimeSchedule {

@@ -1,22 +1,31 @@
-import { LitElement, html, css, svg } from "lit";
+import { LitElement, html, css, svg, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { GlobalState, ServiceInfo } from "../data/websocket-api";
 import { sharedStyles } from "../styles/theme";
 import { ICONS } from "../icons";
 
 const CATEGORY_LABELS: Record<string, string> = {
+  "ai": "Artificial Intelligence",
+  "social_network": "Social Networks",
+  "streaming": "Streaming",
   "video": "Video",
-  "social": "Social",
-  "games": "Games",
+  "gaming": "Gaming",
   "gambling": "Gambling",
   "adult": "Adult",
   "music": "Music",
   "messaging": "Messaging",
-  "cloud": "Cloud",
-  "p2p": "P2P",
   "shopping": "Shopping",
   "education": "Education",
+  "cloud": "Cloud",
+  "p2p": "P2P",
+  "cdn": "CDN",
+  "dating": "Dating",
+  "privacy": "Privacy",
   "other": "Other",
+  // legacy / compat
+  "social": "Social",
+  "games": "Games",
 };
 
 @customElement("services-view")
@@ -93,7 +102,11 @@ export class ServicesView extends LitElement {
         svc.categories.forEach((c) => cats.add(c));
       }
     }
-    return [...cats].sort();
+    return [...cats].sort((a, b) => {
+      const la = (CATEGORY_LABELS[a] || a).toLowerCase();
+      const lb = (CATEGORY_LABELS[b] || b).toLowerCase();
+      return la.localeCompare(lb);
+    });
   }
 
   private _getFilteredServices(): ServiceInfo[] {
@@ -125,6 +138,31 @@ export class ServicesView extends LitElement {
     return svg`<svg viewBox="0 0 24 24" width="${size}" height="${size}"><path fill="currentColor" d="${path}"></path></svg>`;
   }
 
+  /** Decode a base64-encoded or raw SVG string into safe HTML. */
+  private _decodeIcon(raw: string): string {
+    if (!raw) return "🌐";
+    /* If it's a data: URI, extract the base64 part. */
+    if (raw.startsWith("data:")) {
+      const b64 = raw.split(",")[1] || "";
+      try { return atob(b64); } catch { return "🌐"; }
+    }
+    /* If it looks like base64 (no <), decode it. */
+    if (!raw.startsWith("<")) {
+      try { return atob(raw); } catch { return "🌐"; }
+    }
+    return raw;
+  }
+
+  /** Render icon — decoded SVG if available, else globe emoji. */
+  private _renderIcon(raw: string) {
+    const decoded = this._decodeIcon(raw);
+    if (decoded.startsWith("<")) {
+      const cleaned = decoded.replace(/width="[^"]*"/g, "").replace(/height="[^"]*"/g, "");
+      return html`<span class="svc-svg-wrap">${unsafeHTML(cleaned)}</span>`;
+    }
+    return html`<span class="svc-emoji">${decoded}</span>`;
+  }
+
   render() {
     if (!this.state) return html``;
 
@@ -138,7 +176,7 @@ export class ServicesView extends LitElement {
         <div class="card-head">
           <div class="head-left">
             <div class="head-icon">${this._icon(ICONS.services, 18)}</div>
-            <h2>Blocked Services <span class="count">(${blockedCount} / ${this._services.length})</span></h2>
+            <h2>Global Blocked Services <span class="count">(${blockedCount} / ${this._services.length})</span></h2>
           </div>
         </div>
 
@@ -173,21 +211,25 @@ export class ServicesView extends LitElement {
 
               ${this._selectedCategory === "all"
                 ? html`
-                    ${[...catMap.entries()].map(([cat, svcs]) => html`
+                    ${[...catMap.entries()].sort(([a], [b]) => {
+                      const la = (CATEGORY_LABELS[a] || a).toLowerCase();
+                      const lb = (CATEGORY_LABELS[b] || b).toLowerCase();
+                      return la.localeCompare(lb);
+                    }).map(([cat, svcs]) => html`
                       <div class="category-section">
                         <div class="cat-header">
                           <span class="cat-title">${CATEGORY_LABELS[cat] || cat}</span>
                           <span class="cat-badge">${svcs.filter((s) => s.blocked).length} / ${svcs.length} blocked</span>
                         </div>
                         <div class="service-grid">
-                          ${svcs.map((svc) => this._renderService(svc))}
+                          ${[...svcs].sort((a, b) => a.name.localeCompare(b.name)).map((svc) => this._renderService(svc))}
                         </div>
                       </div>
                     `)}
                   `
                 : html`
                     <div class="service-grid">
-                      ${this._getFilteredServices().map((svc) => this._renderService(svc))}
+                      ${[...this._getFilteredServices()].sort((a, b) => a.name.localeCompare(b.name)).map((svc) => this._renderService(svc))}
                     </div>
                   `
               }
@@ -206,7 +248,7 @@ export class ServicesView extends LitElement {
     return html`
       <div class="service-item ${svc.blocked ? "blocked" : "allowed"}" @click=${() => this._toggleBlocked(svc)}>
         <div class="svc-left">
-          <div class="svc-icon">${svc.icon || "🌐"}</div>
+          <div class="svc-icon">${this._renderIcon(svc.icon)}</div>
           <div class="svc-info">
             <div class="svc-name">${svc.name}</div>
             <div class="svc-id">${svc.id}</div>
@@ -216,7 +258,6 @@ export class ServicesView extends LitElement {
           <div class="toggle-track">
             <div class="toggle-thumb"></div>
           </div>
-          <span class="toggle-label">${svc.blocked ? "Blocked" : "Allowed"}</span>
         </div>
       </div>
     `;
@@ -261,7 +302,10 @@ export class ServicesView extends LitElement {
       .service-item.blocked:hover { background: rgba(255, 77, 77, 0.1); border-color: rgba(255, 77, 77, 0.15); }
 
       .svc-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
-      .svc-icon { font-size: 18px; width: 26px; text-align: center; }
+      .svc-icon { width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+      .svc-icon .svc-svg-wrap { display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; }
+      .svc-icon .svc-svg-wrap svg { width: 20px; height: 20px; }
+      .svc-icon .svc-emoji { font-size: 18px; }
       .svc-name { font-size: 12.5px; font-weight: 600; color: var(--agpc-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .svc-id { font-size: 10.5px; color: var(--agpc-text-faint); font-family: var(--code-font-family); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -278,8 +322,7 @@ export class ServicesView extends LitElement {
       }
       .svc-toggle.on .toggle-track { background: var(--agpc-red); }
       .svc-toggle.on .toggle-track::after { background: white; transform: translateX(15px); }
-      .toggle-label { font-size: 10.5px; color: var(--agpc-text-faint); }
-      .svc-toggle.on .toggle-label { color: var(--agpc-red); font-weight: 600; }
+
 
       .category-tabs { display: flex; gap: 4px; margin-bottom: 16px; overflow-x: auto; padding-bottom: 4px; flex-wrap: nowrap; }
       .cat-tab { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: var(--agpc-text-faint); font-size: 11.5px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: all 0.15s ease; }

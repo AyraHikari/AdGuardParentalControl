@@ -1,6 +1,6 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { GlobalState, Policy, PolicyRule } from "../data/websocket-api";
+import { GlobalState, Policy, PolicyRule, ServiceInfo } from "../data/websocket-api";
 
 type Tab = "general" | "rules" | "schedule" | "calendar" | "exceptions" | "preview";
 
@@ -22,13 +22,24 @@ export class PolicyView extends LitElement {
   @state() private _newRuleTarget = "";
   @state() private _newRuleAction: "block" | "allow" = "block";
   @state() private _newRuleType: "domain" | "service" | "category" = "domain";
+  @state() private _newRuleIsRegex = false;
   @state() private _newExceptionTarget = "";
   @state() private _newExceptionType: "domain" | "service" | "category" = "domain";
+  @state() private _newExceptionIsRegex = false;
+  @state() private _availableServices: ServiceInfo[] = [];
+
+  connectedCallback() {
+    super.connectedCallback();
+    this._loadServices();
+  }
 
   protected updated(changed: Map<PropertyKey, unknown>) {
     if (changed.has("policy")) {
       this._draft = this._clonePolicy(this.policy);
       this._dirty = false;
+    }
+    if (changed.has("hass") && this.hass && !this._availableServices.length) {
+      this._loadServices();
     }
   }
 
@@ -197,7 +208,7 @@ export class PolicyView extends LitElement {
             <table class="data-table"><thead><tr><th>Type</th><th>Target</th><th>Action</th><th></th></tr></thead><tbody>
               ${this._p.rules.map((r, i) => html`<tr>
                 <td><span class="badge">${r.rule_type}</span></td>
-                <td class="mono">${r.target}</td>
+                <td class="mono">${r.target}${r.is_regex ? html` <span class="regex-badge">.*</span>` : ""}</td>
                 <td><span class=${r.action === "block" ? "status-dot blocked" : "status-dot allowed"}>${r.action}</span></td>
                 <td class="end"><button class="text-btn danger-text" @click=${() => this._removeRule(i)}>Remove</button></td>
               </tr>`)}
@@ -214,12 +225,49 @@ export class PolicyView extends LitElement {
   }
 
   private _renderRuleForm(exception: boolean) {
+    const ruleType = exception ? this._newExceptionType : this._newRuleType;
+    const isService = ruleType === "service";
+    const targetValue = exception ? this._newExceptionTarget : this._newRuleTarget;
+    const isRegex = exception ? this._newExceptionIsRegex : this._newRuleIsRegex;
+
+    const onTypeChange = (e: Event) => {
+      const val = (e.target as HTMLSelectElement).value as any;
+      if (exception) this._newExceptionType = val;
+      else this._newRuleType = val;
+      // Clear target when switching type
+      if (exception) this._newExceptionTarget = "";
+      else this._newRuleTarget = "";
+      // Pre-load services when switching to service type
+      if (val === "service") this._loadServices();
+    };
+
+    const onTargetChange = (e: Event) => {
+      const val = (e.target as HTMLInputElement | HTMLSelectElement).value;
+      if (exception) this._newExceptionTarget = val;
+      else this._newRuleTarget = val;
+    };
+
+    const onRegexChange = (e: Event) => {
+      const val = (e.target as HTMLInputElement).checked;
+      if (exception) this._newExceptionIsRegex = val;
+      else this._newRuleIsRegex = val;
+    };
+
+    const targetInput = isService && !isRegex
+      ? html`<select class="select" .value=${targetValue} @change=${onTargetChange}>
+          <option value="">Select service…</option>
+          ${this._availableServices.sort((a, b) => a.name.localeCompare(b.name)).map(s => html`<option value=${s.id} ?selected=${s.id === targetValue}>${s.name}</option>`)}
+        </select>`
+      : html`<input class="input" .value=${targetValue} @input=${onTargetChange}
+          placeholder=${isRegex ? "/regex_pattern/" : (exception ? "whatsapp.com" : "example.com")} />`;
+
     return html`
-      <div class="inline-form">
-        <div><label>Type</label><select class="select" .value=${this._newRuleType} @change=${(e: Event) => (this._newRuleType = (e.target as HTMLSelectElement).value as any)}>
+      <div class="inline-form rule-form">
+        <div><label>Type</label><select class="select" .value=${ruleType} @change=${onTypeChange}>
           <option value="domain">Domain</option><option value="service">Service</option><option value="category">Category</option>
         </select></div>
-        <div class="grow"><label>${exception ? "Allowed target" : "Target"}</label><input class="input" .value=${exception ? this._newExceptionTarget : this._newRuleTarget} @input=${(e: Event) => exception ? (this._newExceptionTarget = (e.target as HTMLInputElement).value) : (this._newRuleTarget = (e.target as HTMLInputElement).value)} placeholder=${exception ? "whatsapp.com" : "example.com"} /></div>
+        <div class="grow"><label>${exception ? "Allowed target" : "Target"}</label>${targetInput}</div>
+        <div class="regex-toggle"><label class="toggle-line"><input type="checkbox" .checked=${isRegex} @change=${onRegexChange} /><span>Regex</span></label></div>
         ${exception ? html`` : html`<div><label>Action</label><select class="select" .value=${this._newRuleAction} @change=${(e: Event) => (this._newRuleAction = (e.target as HTMLSelectElement).value as any)}><option value="block">Block</option><option value="allow">Allow</option></select></div>`}
         <button class="btn primary" @click=${exception ? this._addException : this._addRule}>Add</button>
         <button class="btn" @click=${() => exception ? (this._showAddException = false) : (this._showAddRule = false)}>Cancel</button>
@@ -283,7 +331,7 @@ export class PolicyView extends LitElement {
           <p class="help">Exceptions are explicit allow rules that override a matching block from this policy.</p>
           ${this._showAddException ? this._renderRuleForm(true) : ""}
           ${exceptions.length ? html`<table class="data-table"><thead><tr><th>Type</th><th>Allowed target</th><th></th></tr></thead><tbody>
-            ${exceptions.map((r, i) => html`<tr><td><span class="badge">${r.rule_type}</span></td><td class="mono">${r.target}</td><td class="end"><button class="text-btn danger-text" @click=${() => this._removeException(i)}>Remove</button></td></tr>`)}
+            ${exceptions.map((r, i) => html`<tr><td><span class="badge">${r.rule_type}</span></td><td class="mono">${r.target}${r.is_regex ? html` <span class=\"regex-badge\">.*</span>` : ""}</td><td class="end"><button class="text-btn danger-text" @click=${() => this._removeException(i)}>Remove</button></td></tr>`)}
           </tbody></table>` : html`<div class="empty-box">No policy-specific exceptions.</div>`}
         </div>
       </section>
@@ -314,7 +362,7 @@ export class PolicyView extends LitElement {
         <section class="card">
           <div class="card-title">Effective Rule Summary</div>
           <div class="card-body">
-            ${rules.length ? html`<div class="rule-summary">${rules.map(r => html`<div class="rule-line"><span class=${r.action === "block" ? "dot red" : "dot green"}></span><span class="badge">${r.rule_type}</span><span class="mono">${r.target}</span><b class=${r.action === "block" ? "red" : "green"}>${r.action.toUpperCase()}</b></div>`)}</div>` : html`<div class="empty-box">No explicit rules.</div>`}
+            ${rules.length ? html`<div class="rule-summary">${rules.map(r => html`<div class="rule-line"><span class=${r.action === "block" ? "dot red" : "dot green"}></span><span class="badge">${r.rule_type}</span><span class="mono">${r.target}${r.is_regex ? html` <span class=\"regex-badge\">.*</span>` : ""}</span><b class=${r.action === "block" ? "red" : "green"}>${r.action.toUpperCase()}</b></div>`)}</div>` : html`<div class="empty-box">No explicit rules.</div>`}
             ${exceptions.length ? html`<div class="exception-preview"><div class="eyebrow">Exceptions</div>${exceptions.map(r => html`<div class="rule-line"><span class="dot green"></span><span class="mono">${r.target}</span><b class="green">ALLOW</b></div>`)}</div>` : ""}
           </div>
         </section>
@@ -366,18 +414,29 @@ export class PolicyView extends LitElement {
   private _onTagKeydown = (e: KeyboardEvent) => { if (e.key === "Enter") { e.preventDefault(); this._addTagFromInput(); } };
   private _removeTag = (tag: string) => this._markDirty({ ...this._p, tags: (this._p.tags || []).filter(t => t !== tag) });
 
+  private async _loadServices() {
+    if (!this.hass || this._availableServices.length) return;
+    try {
+      this._availableServices = await this.hass.callWS({ type: "adguard_pc/services/list" });
+    } catch (err) {
+      console.error("Failed to load services:", err);
+    }
+  }
+
   private async _addRule() {
+    await this._loadServices();
     if (!this._newRuleTarget.trim()) return;
-    const rules = [...this._p.rules, { target: this._newRuleTarget.trim(), action: this._newRuleAction, rule_type: this._newRuleType } as PolicyRule];
+    const rules = [...this._p.rules, { target: this._newRuleTarget.trim(), action: this._newRuleAction, rule_type: this._newRuleType, ...(this._newRuleIsRegex ? { is_regex: true } : {}) } as PolicyRule];
     await this._persist({ ...this._p, rules });
-    this._newRuleTarget = ""; this._showAddRule = false;
+    this._newRuleTarget = ""; this._showAddRule = false; this._newRuleIsRegex = false;
   }
   private async _removeRule(i: number) { const rules = this._p.rules.filter((_, idx) => idx !== i); await this._persist({ ...this._p, rules }); }
   private async _addException() {
+    await this._loadServices();
     if (!this._newExceptionTarget.trim()) return;
-    const exceptions = [...(this._p.exceptions || []), { target: this._newExceptionTarget.trim(), action: "allow", rule_type: this._newExceptionType } as PolicyRule];
+    const exceptions = [...(this._p.exceptions || []), { target: this._newExceptionTarget.trim(), action: "allow", rule_type: this._newExceptionType, ...(this._newExceptionIsRegex ? { is_regex: true } : {}) } as PolicyRule];
     await this._persist({ ...this._p, exceptions });
-    this._newExceptionTarget = ""; this._showAddException = false;
+    this._newExceptionTarget = ""; this._showAddException = false; this._newExceptionIsRegex = false;
   }
   private async _removeException(i: number) { const exceptions = (this._p.exceptions || []).filter((_, idx) => idx !== i); await this._persist({ ...this._p, exceptions }); }
 
@@ -495,7 +554,10 @@ export class PolicyView extends LitElement {
     .tag-add { display:flex; gap:8px; margin-top:10px; }
     .tag-add .input { flex:1; }
     .help { color:var(--secondary-text-color); font-size:13px; line-height:1.45; margin:0 0 14px; }
-    .inline-form { display:grid; grid-template-columns:150px minmax(220px,1fr) 140px auto auto; gap:8px; align-items:end; padding:13px; background:#101726; border:1px solid #253047; border-radius:9px; margin-bottom:13px; }
+    .inline-form { display:grid; grid-template-columns:150px minmax(220px,1fr) auto 140px auto auto; gap:8px; align-items:end; padding:13px; background:#101726; border:1px solid #253047; border-radius:9px; margin-bottom:13px; }
+    .regex-toggle { display:flex; align-items:end; padding-bottom:4px; }
+    .regex-toggle label { margin:0; }
+    .regex-badge { display:inline-block; background:#1a3a5c; color:#6aafef; font-size:10px; padding:1px 4px; border-radius:3px; font-weight:600; vertical-align:middle; }
     .grow { min-width:0; }
     .data-table { width:100%; border-collapse:collapse; }
     .data-table th,.data-table td { text-align:left; padding:11px 8px; border-bottom:1px solid rgba(255,255,255,.07); font-size:13px; }

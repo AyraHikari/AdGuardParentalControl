@@ -21,6 +21,7 @@ export class ListView extends LitElement {
   @state() private _showAdd = false;
   @state() private _newName = "";
   @state() private _newSecondary = "";
+  @state() private _deleteTarget: any = null;
 
   private _icon(path: string, size = 15) {
     return svg`<svg viewBox="0 0 24 24" width="${size}" height="${size}"><path fill="currentColor" d="${path}"></path></svg>`;
@@ -114,30 +115,10 @@ export class ListView extends LitElement {
 
         ${cfg.items.length === 0
           ? html`<div class="empty-state">No ${cfg.title.toLowerCase()} configured yet.</div>`
-          : html`
-              <table class="table">
-                <thead>
-                  <tr>
-                    ${cfg.columns.map((c) => html`<th>${c}</th>`)}
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${cfg.items.map((item: any) => {
-                    const values = cfg.rowValues(item);
-                    return html`
-                      <tr class="clickable" @click=${() => this.onNavigate?.(cfg.detailView, item)}>
-                        <td class="name-cell">${item[cfg.nameField]}</td>
-                        ${values.map((v: any) => html`<td>${v}</td>`)}
-                        <td class="menu-cell">
-                          <span class="icon-btn">${this._icon(ICONS.chevronRight, 15)}</span>
-                        </td>
-                      </tr>
-                    `;
-                  })}
-                </tbody>
-              </table>
-            `}
+          : this.kind === "policies"
+            ? this._renderPolicyList(cfg)
+            : this._renderTable(cfg)
+        }
       </div>
 
       ${this._showAdd ? html`
@@ -164,7 +145,93 @@ export class ListView extends LitElement {
           </div>
         </div>
       ` : nothing}
+
+      ${this._deleteTarget ? html`
+        <div class="confirm-scrim" @click=${() => { this._deleteTarget = null; }}>
+          <div class="confirm-box" @click=${(e: Event) => e.stopPropagation()}>
+            <h3>Delete "${this._deleteTarget.name}"?</h3>
+            <p>This action cannot be undone. All associated data will be removed.</p>
+            <div class="confirm-actions">
+              <button class="btn" @click=${() => { this._deleteTarget = null; }}>Cancel</button>
+              <button class="btn-danger" @click=${this._deleteItem}>Delete</button>
+            </div>
+          </div>
+        </div>
+      ` : nothing}
     `;
+  }
+
+  private _renderTable(cfg: any) {
+    return html`
+      <table class="table">
+        <thead>
+          <tr>
+            ${cfg.columns.map((c: string) => html`<th>${c}</th>`)}
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${cfg.items.map((item: any) => {
+            const values = cfg.rowValues(item);
+            return html`
+              <tr class="clickable" @click=${() => this.onNavigate?.(cfg.detailView, item)}>
+                <td class="name-cell">${item[cfg.nameField]}</td>
+                ${values.map((v: any) => html`<td>${v}</td>`)}
+                <td class="menu-cell">
+                  <span class="icon-btn">${this._icon(ICONS.chevronRight, 15)}</span>
+                </td>
+              </tr>
+            `;
+          })}
+        </tbody>
+      </table>
+    `;
+  }
+
+  private _renderPolicyList(cfg: any) {
+    return html`
+      <div class="policy-list">
+        ${cfg.items.map((p: any) => {
+          const profileName = this._profileName(p.profile_id);
+          const enabled = p.enabled !== false;
+          const desc = p.description || "";
+          return html`
+            <div class="policy-card clickable" @click=${() => this.onNavigate?.("policy-detail", p)}>
+              <div class="policy-card-main">
+                <div class="policy-card-top">
+                  <span class="policy-card-name">${p.name || "Untitled"}</span>
+                  <label class="toggle-line" @click=${(e: Event) => e.stopPropagation()}>
+                    <input type="checkbox" ?checked=${enabled}
+                      @change=${(e: Event) => this._togglePolicyEnabled(p, (e.target as HTMLInputElement).checked)} />
+                    <span class="toggle-label">${enabled ? "On" : "Off"}</span>
+                  </label>
+                </div>
+                ${desc ? html`<div class="policy-card-desc">${desc.length > 100 ? desc.slice(0, 100) + "…" : desc}</div>` : ""}
+                <div class="policy-card-meta">
+                  <span class="meta-pill">Priority ${p.priority}</span>
+                  <span class="meta-pill">${p.rules.length} rule${p.rules.length === 1 ? "" : "s"}</span>
+                  ${p.exceptions?.length ? html`<span class="meta-pill">${p.exceptions.length} exception${p.exceptions.length === 1 ? "" : "s"}</span>` : ""}
+                  <span class="meta-pill">${profileName}</span>
+                </div>
+              </div>
+              <div class="policy-card-arrow">${this._icon(ICONS.chevronRight, 15)}</div>
+            </div>
+          `;
+        })}
+      </div>
+    `;
+  }
+
+  private async _togglePolicyEnabled(p: any, enabled: boolean) {
+    try {
+      await this.hass.callWS({
+        type: "adguard_pc/policies/update",
+        policy: { ...p, enabled },
+      });
+      this.onStateChanged?.();
+    } catch (err) {
+      console.error("Failed to toggle policy:", err);
+    }
   }
 
   private async _create() {
@@ -202,6 +269,27 @@ export class ListView extends LitElement {
     this.onStateChanged?.();
   }
 
+  private async _deleteItem() {
+    if (!this._deleteTarget) return;
+    const item = this._deleteTarget;
+    this._deleteTarget = null;
+    try {
+      const kind = this.kind;
+      const msgMap: Record<string, { type: string; key: string }> = {
+        policies: { type: "adguard_pc/policies/delete", key: "policy_id" },
+        groups:    { type: "adguard_pc/groups/delete",    key: "group_id" },
+        members:   { type: "adguard_pc/members/delete",   key: "member_id" },
+        clients:   { type: "adguard_pc/clients/delete",   key: "client_id" },
+        profiles:  { type: "adguard_pc/profiles/delete",  key: "profile_id" },
+      };
+      const msg = msgMap[kind];
+      if (msg) await this.hass.callWS({ type: msg.type, [msg.key]: item.id });
+      this.onStateChanged?.();
+    } catch (err) {
+      console.error("Delete failed:", err);
+    }
+  }
+
   static styles = [
     sharedStyles,
     css`
@@ -214,6 +302,43 @@ export class ListView extends LitElement {
       .count { color: var(--agpc-text-faint); font-weight: 500; }
       .name-cell { font-weight: 600; color: var(--agpc-text); }
       .menu-cell { text-align: right; color: var(--agpc-text-faint); }
+
+      .policy-list { display: flex; flex-direction: column; gap: 8px; }
+      .policy-card {
+        display: flex; align-items: center; gap: 12px;
+        background: var(--agpc-card-bg-alt); border: 1px solid var(--agpc-border);
+        border-radius: var(--agpc-radius-md, 10px); padding: 14px 16px;
+        cursor: pointer; transition: border-color .15s, background .15s;
+      }
+      .policy-card:hover { border-color: var(--agpc-blue); background: rgba(22,119,255,.06); }
+      .policy-card-main { flex: 1; min-width: 0; }
+      .policy-card-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+      .policy-card-name { font-weight: 650; font-size: 14px; color: var(--agpc-text); }
+      .policy-card-desc { color: var(--agpc-text-faint); font-size: 12px; margin-top: 4px; line-height: 1.4; }
+      .policy-card-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+      .meta-pill {
+        display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px;
+        background: rgba(255,255,255,.06); color: var(--agpc-text-faint); font-weight: 500;
+      }
+      .policy-card-arrow { color: var(--agpc-text-faint); flex-shrink: 0; }
+      .policy-card-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+      .switch-toggle { position: relative; display: inline-block; width: 36px; height: 20px; cursor: pointer; }
+      .switch-toggle input { opacity: 0; width: 0; height: 0; }
+      .switch-slider {
+        position: absolute; inset: 0; background: #3a4560; border-radius: 20px; transition: background .2s;
+      }
+      .switch-slider::before {
+        content: ""; position: absolute; left: 2px; top: 2px; width: 16px; height: 16px;
+        border-radius: 50%; background: #a0aac0; transition: transform .2s, background .2s;
+      }
+      .switch-toggle input:checked + .switch-slider { background: var(--agpc-green, #20c879); }
+      .switch-toggle input:checked + .switch-slider::before { transform: translateX(16px); background: #fff; }
+      .btn-delete-sm {
+        padding: 4px 10px; font-size: 11px; font-weight: 600;
+        background: #451d24; color: #ff6875; border: 1px solid #6b2832;
+        border-radius: 6px; cursor: pointer; transition: background .15s;
+      }
+      .btn-delete-sm:hover { background: #5c2430; }
 
       .modal-scrim {
         position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55);
@@ -234,6 +359,22 @@ export class ListView extends LitElement {
       .modal-fields .field:focus { border-color: var(--agpc-blue); }
       .modal-fields .field::placeholder { color: var(--agpc-text-faint); }
       .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+      .confirm-scrim {
+        position: fixed; inset: 0; background: rgba(0,0,0,0.55); display: flex; align-items: center; justify-content: center; z-index: 60;
+      }
+      .confirm-box {
+        background: var(--agpc-card-bg); border: 1px solid var(--agpc-border); border-radius: var(--agpc-radius-lg);
+        padding: 24px; width: 360px; max-width: 90vw; text-align: left;
+      }
+      .confirm-box h3 { margin: 0 0 8px; font-size: 16px; color: var(--agpc-text); }
+      .confirm-box p { margin: 0 0 18px; font-size: 13px; color: var(--agpc-text-faint); }
+      .confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+      .btn-danger {
+        background: #b94650; color: #fff; border: 1px solid #b94650; border-radius: 7px;
+        padding: 8px 14px; font: 600 11px inherit; cursor: pointer;
+      }
+      .btn-danger:hover { background: #a03c45; }
     `,
   ];
 }

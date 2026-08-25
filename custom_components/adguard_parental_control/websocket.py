@@ -666,16 +666,27 @@ async def ws_services_list(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict
 ) -> None:
     coordinator = _get_coordinator(hass)
-    all_services = await coordinator.api.get_all_blocked_services()
+    all_data = await coordinator.api.get_all_blocked_services()
     blocked_ids = await coordinator.api.get_blocked_services()
+    all_services = all_data.get("blocked_services", []) if isinstance(all_data, dict) else all_data
+    all_groups = all_data.get("groups", []) if isinstance(all_data, dict) else []
+    # Build group_id → group name map
+    group_name_map: dict[str, str] = {}
+    for grp in all_groups:
+        gid = grp.get("id", "")
+        gname = grp.get("name", "")
+        if gid and gname:
+            group_name_map[gid] = gname
     result = []
     for svc in all_services:
+        group_id = svc.get("group_id", "")
+        category = group_name_map.get(group_id, group_id) if group_id else ""
         result.append({
             "id": svc.get("id", ""),
             "name": svc.get("name", ""),
-            "icon": svc.get("icon_class", ""),
+            "icon": svc.get("icon_class", "") or svc.get("icon_svg", ""),
             "blocked": svc.get("id", "") in blocked_ids,
-            "categories": svc.get("categories", []),
+            "categories": [category] if category else [],
         })
     connection.send_result(msg["id"], result)
 
@@ -798,7 +809,10 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
 
 
 def _rule_dict(r: PolicyRule) -> dict:
-    return {"target": r.target, "action": r.action.value, "rule_type": r.rule_type.value}
+    d = {"target": r.target, "action": r.action.value, "rule_type": r.rule_type.value}
+    if r.is_regex:
+        d["is_regex"] = True
+    return d
 
 
 def _rule_from_dict(d: dict) -> PolicyRule:
