@@ -6,6 +6,7 @@ import logging
 import os
 
 from homeassistant.components.frontend import async_register_built_in_panel
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -52,7 +53,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await async_setup_services(hass)
-    await async_register_websocket_commands(hass)
+    async_register_websocket_commands(hass)
     await _async_register_panel(hass, entry)
 
     _LOGGER.info("AdGuard Parental Control setup complete")
@@ -87,10 +88,10 @@ async def _async_register_panel(hass: HomeAssistant, entry: ConfigEntry) -> None
     # Ensure www directory exists
     os.makedirs(www_dir, exist_ok=True)
 
-    try:
-        hass.http.register_static_path(URL_BASE, www_dir, cache_headers=False)
-    except Exception:
-        _LOGGER.debug("Could not register static path (may already exist)")
+    # Register static file serving for the frontend bundle
+    await hass.http.async_register_static_paths(
+        [StaticPathConfig(URL_BASE, www_dir, cache_headers=False)]
+    )
 
     try:
         async_register_built_in_panel(

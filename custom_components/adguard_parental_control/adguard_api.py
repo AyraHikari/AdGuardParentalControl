@@ -34,8 +34,8 @@ class AdGuardHomeAPI:
     def _headers(self) -> dict[str, str]:
         h: dict[str, str] = {"Content-Type": "application/json"}
         if self._token:
-            # AdGuard Home uses cookie-based session auth
-            h["Cookie"] = f"session_id={self._token}"
+            # AdGuard Home uses cookie-based session auth ("agh_session")
+            h["Cookie"] = f"agh_session={self._token}"
         return h
 
     async def _request(
@@ -87,14 +87,20 @@ class AdGuardHomeAPI:
                 ssl=None if self._verify_ssl else False,
             ) as resp:
                 resp.raise_for_status()
-                # Try cookie-based token first (standard AdGuard Home)
                 token: str | None = None
-                set_cookie = resp.headers.get("Set-Cookie", "")
-                for part in set_cookie.split(";"):
-                    kv = part.strip().split("=", 1)
-                    if len(kv) == 2 and kv[0].strip() == "session_id":
-                        token = kv[1].strip()
+                # aiohttp parses Set-Cookie into resp.cookies automatically
+                # AdGuard Home uses cookie name "agh_session" (not "session_id")
+                for cookie_name in ("agh_session", "session_id"):
+                    session_cookie = resp.cookies.get(cookie_name)
+                    if session_cookie:
+                        token = session_cookie.value
                         break
+                _LOGGER.debug(
+                    "Login response: status=%s content_type=%s cookies=%s",
+                    resp.status,
+                    resp.content_type,
+                    dict(resp.cookies),
+                )
                 # Fallback: some builds return JSON with "token"
                 if token is None and "application/json" in resp.content_type:
                     data = await resp.json()
@@ -102,6 +108,7 @@ class AdGuardHomeAPI:
                 # Fallback: body may be the token itself
                 if token is None:
                     body = (await resp.text()).strip()
+                    _LOGGER.debug("Login body: %s", body)
                     if body and body != "OK":
                         token = body
                 self._token = token
