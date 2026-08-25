@@ -3,20 +3,9 @@ import { customElement, property, state } from "lit/decorators.js";
 import { Client, GlobalState, Policy, QueryLogEntry } from "../data/websocket-api";
 import { sharedStyles } from "../styles/theme";
 import { ICONS } from "../icons";
+import { lookupService, serviceIcon } from "../data/services-registry";
 
 type Tab = "general" | "policies" | "rules" | "overrides" | "activity";
-
-const SERVICE_REGISTRY: Array<{ name: string; domains: string[]; icon: string; color: string }> = [
-  { name: "YouTube", domains: ["youtube.com", "youtube-nocookie.com", "googlevideo.com", "ytimg.com", "youtubei.googleapis.com"], icon: "▶", color: "#ff3030" },
-  { name: "Google", domains: ["google.com", "googleapis.com", "gstatic.com", "googleusercontent.com"], icon: "G", color: "#4285f4" },
-  { name: "WhatsApp", domains: ["whatsapp.com", "whatsapp.net", "wa.me"], icon: "◉", color: "#25d366" },
-  { name: "Instagram", domains: ["instagram.com", "cdninstagram.com"], icon: "◎", color: "#e1306c" },
-  { name: "Discord", domains: ["discord.com", "discordapp.com", "discord.gg"], icon: "◉", color: "#7289da" },
-  { name: "TikTok", domains: ["tiktok.com", "tiktokcdn.com", "tiktokv.com"], icon: "♪", color: "#25f4ee" },
-  { name: "Netflix", domains: ["netflix.com", "nflxvideo.net", "nflximg.net"], icon: "N", color: "#e50914" },
-  { name: "Spotify", domains: ["spotify.com", "spotifycdn.com"], icon: "●", color: "#1ed760" },
-];
-function serviceFor(host: string) { const h=host.toLowerCase().replace(/\.$/,""); return SERVICE_REGISTRY.find(s=>s.domains.some(d=>h===d||h.endsWith(`.${d}`)))||null; }
 
 @customElement("client-view")
 export class ClientView extends LitElement {
@@ -50,14 +39,14 @@ export class ClientView extends LitElement {
   private _next(p:Policy|null){const s=p?.time_schedule;if(!s?.time_from||!s.time_to)return"—";const now=new Date(),cur=now.getHours()*60+now.getMinutes(),[fh,fm]=s.time_from.split(":").map(Number),[th,tm]=s.time_to.split(":").map(Number),from=fh*60+fm,to=th*60+tm,active=from<=to?cur>=from&&cur<to:cur>=from||cur<to;return active?s.time_to:s.time_from;}
   private _blockedServices(){return [...new Set(this._policies.flatMap(p=>p.rules.filter(r=>r.rule_type==="service"&&r.action==="block").map(r=>r.target)))];}
   private _allowedServices(){return [...new Set(this._policies.flatMap(p=>p.rules.filter(r=>r.rule_type==="service"&&r.action==="allow").map(r=>r.target)))];}
-  private _blocked(q:QueryLogEntry){const x=`${q.reason||""} ${q.rule||""} ${q.status||""}`.toLowerCase();return /filtered|blocked|blacklist|parental|service|denied/.test(x);}
+  private _blocked(q:QueryLogEntry){const r=(q.reason||"").toLowerCase();return /filtered\/(blocked|blacklist|safebrowsing|parental|safesearch|service)/.test(r)||/\bblocked\b/.test(r)||/\bblacklist\b/.test(r);}
   private _time(v:string){const d=new Date(v);return Number.isNaN(d.getTime())?v.slice(11,19):d.toLocaleTimeString([], {hour12:false});}
-  private _response(q:QueryLogEntry){return q.answer?.[0]?.value||(this._blocked(q)?"Blocked":"—");}
+  private _response(q:QueryLogEntry){return q.answer?.[0]?.value||q.status||"—";}
   private _ms(q:QueryLogEntry){const n=Number.parseFloat(q.elapsedMs||"");return Number.isFinite(n)?`${Math.round(n)} ms`:q.elapsedMs||"—";}
   private _logs(){const search=this._querySearch.toLowerCase().trim();return this._queryLogs.filter(q=>!search||(q.question?.host||"").toLowerCase().includes(search));}
   private _topDomains(){const m=new Map<string,any>();for(const q of this._queryLogs){const k=q.question?.host||"unknown",v=m.get(k)||{requests:0,blocked:0,processed:0,totalMs:0};v.requests++;if(this._blocked(q))v.blocked++;else{v.processed++;const ms=Number.parseFloat(q.elapsedMs||"");if(Number.isFinite(ms))v.totalMs+=ms;}m.set(k,v);}return [...m.entries()].sort((a,b)=>b[1].requests-a[1].requests).slice(0,5);}
-  private _topServices(){const m=new Map<string,any>();for(const q of this._queryLogs){const s=serviceFor(q.question?.host||""),k=s?.name||q.question?.host||"unknown",v=m.get(k)||{service:s,requests:0,blocked:0,processed:0,totalMs:0};v.requests++;if(this._blocked(q))v.blocked++;else{v.processed++;const ms=Number.parseFloat(q.elapsedMs||"");if(Number.isFinite(ms))v.totalMs+=ms;}m.set(k,v);}return [...m.entries()].sort((a,b)=>b[1].requests-a[1].requests).slice(0,5);}
-  private _serviceIcon(host:string,size=21){const s=serviceFor(host);return s?html`<span class="service-icon" style="--service-color:${s.color};width:${size}px;height:${size}px">${s.icon}</span>`:html`<span class="service-fallback" style="width:${size}px;height:${size}px">🌐</span>`;}
+  private _topServices(){const m=new Map<string,any>();for(const q of this._queryLogs){const s=lookupService(q.question?.host||""),k=s?.name||q.question?.host||"unknown",v=m.get(k)||{service:s,requests:0,blocked:0,processed:0,totalMs:0};v.requests++;if(this._blocked(q))v.blocked++;else{v.processed++;const ms=Number.parseFloat(q.elapsedMs||"");if(Number.isFinite(ms))v.totalMs+=ms;}m.set(k,v);}return [...m.entries()].sort((a,b)=>b[1].requests-a[1].requests).slice(0,5);}
+  private _serviceIcon(host:string,size=21){return serviceIcon(host,size);}
   private _startQueryPolling(){this._stopQueryPolling();if(this._queryLive){this._loadQueryLog();this._queryTimer=window.setInterval(()=>this._loadQueryLog(),5000);}}
   private _stopQueryPolling(){if(this._queryTimer)window.clearInterval(this._queryTimer);this._queryTimer=undefined;}
   private async _loadQueryLog(){if(!this.client||!this.hass||this._queryLoading)return;this._queryLoading=true;try{const d=await this.hass.callWS({type:"adguard_pc/clients/querylog",client_id:this.client.name,limit:120,search:"",response_status:""});this._queryLogs=d?.data||[];this._queryError="";}catch(e){this._queryError=e instanceof Error?e.message:"Unable to load AdGuard query log";}finally{this._queryLoading=false;}}

@@ -111,8 +111,11 @@ export class GroupView extends LitElement {
           ${this.group.client_names.length === 0 ? html`<p class="empty">No clients assigned</p>` : ""}
           ${this.group.client_names.map(
             (cn) => html`
-              <div class="list-item">
-                <span class="item-text">${cn}</span>
+              <div class="list-item client-row">
+                <span class="item-text client-link" @click=${() => this.onNavigate?.("client-detail", this.state.clients.find((c) => c.name === cn))}>
+                  ${cn}
+                  <ha-icon .path=${"M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"}></ha-icon>
+                </span>
                 <ha-icon-button label="Remove"
                   .path=${"M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"}
                   @click=${() => this._removeClient(cn)}
@@ -174,14 +177,12 @@ export class GroupView extends LitElement {
     if (!name || this.group.member_names.includes(name)) return;
     const updated: Group = { ...this.group, member_names: [...this.group.member_names, name] };
     await this.hass.callWS({ type: "adguard_pc/groups/update", group: updated });
-    this.group = updated;
     this.onStateChanged?.();
   }
 
   private async _removeMember(name: string) {
     const updated: Group = { ...this.group, member_names: this.group.member_names.filter((m) => m !== name) };
     await this.hass.callWS({ type: "adguard_pc/groups/update", group: updated });
-    this.group = updated;
     this.onStateChanged?.();
   }
 
@@ -189,14 +190,12 @@ export class GroupView extends LitElement {
     if (!name || this.group.client_names.includes(name)) return;
     const updated: Group = { ...this.group, client_names: [...this.group.client_names, name] };
     await this.hass.callWS({ type: "adguard_pc/groups/update", group: updated });
-    this.group = updated;
     this.onStateChanged?.();
   }
 
   private async _removeClient(name: string) {
     const updated: Group = { ...this.group, client_names: this.group.client_names.filter((c) => c !== name) };
     await this.hass.callWS({ type: "adguard_pc/groups/update", group: updated });
-    this.group = updated;
     this.onStateChanged?.();
   }
 
@@ -204,14 +203,12 @@ export class GroupView extends LitElement {
     if (!id || this.group.assigned_policy_ids.includes(id)) return;
     const updated: Group = { ...this.group, assigned_policy_ids: [...this.group.assigned_policy_ids, id] };
     await this.hass.callWS({ type: "adguard_pc/groups/update", group: updated });
-    this.group = updated;
     this.onStateChanged?.();
   }
 
   private async _removePolicy(id: string) {
     const updated: Group = { ...this.group, assigned_policy_ids: this.group.assigned_policy_ids.filter((p) => p !== id) };
     await this.hass.callWS({ type: "adguard_pc/groups/update", group: updated });
-    this.group = updated;
     this.onStateChanged?.();
   }
 
@@ -231,6 +228,9 @@ export class GroupView extends LitElement {
     .meta { color: var(--secondary-text-color); font-size: 0.9em; margin: 0; }
     .list-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--divider-color, #e0e0e0); }
     .list-item:last-child { border-bottom: none; }
+    .client-row { cursor: pointer; }
+    .client-row:hover { background: var(--secondary-background-color, #333); border-radius: 6px; }
+    .client-link { color: var(--primary-color, #03a9f4); }
     .item-text { display: flex; align-items: center; gap: 4px; }
     .clickable { cursor: pointer; color: var(--primary-color, #03a9f4); }
     .empty { color: var(--secondary-text-color); font-style: italic; margin: 0; }

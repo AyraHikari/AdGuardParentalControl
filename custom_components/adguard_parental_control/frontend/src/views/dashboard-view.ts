@@ -1,6 +1,6 @@
 import { LitElement, html, css, svg } from "lit";
-import { customElement, property } from "lit/decorators.js";
-import { Client, GlobalState } from "../data/websocket-api";
+import { customElement, property, state } from "lit/decorators.js";
+import { Client, GlobalState, Group } from "../data/websocket-api";
 import { sharedStyles } from "../styles/theme";
 import { ICONS } from "../icons";
 
@@ -12,11 +12,19 @@ interface ClientRow {
   nextChange: string;
 }
 
+interface GroupedSection {
+  name: string;
+  groupId: string | null;
+  rows: ClientRow[];
+  collapsed: boolean;
+}
+
 @customElement("dashboard-view")
 export class DashboardView extends LitElement {
   @property({ attribute: false }) public hass: any;
   @property({ attribute: false }) public state!: GlobalState;
   @property({ type: Object }) public onNavigate?: (view: string, detail?: any) => void;
+  @state() private _collapsedGroups: Set<string> = new Set();
 
   private _icon(path: string, size = 20) {
     return svg`<svg viewBox="0 0 24 24" width="${size}" height="${size}"><path fill="currentColor" d="${path}"></path></svg>`;
@@ -28,6 +36,47 @@ export class DashboardView extends LitElement {
     const group = this.state.groups.find((g) => g.client_names.includes(client.name));
     if (group) return group.name;
     return "Unassigned";
+  }
+
+  private _toggleGroup(groupId: string) {
+    const next = new Set(this._collapsedGroups);
+    if (next.has(groupId)) next.delete(groupId); else next.add(groupId);
+    this._collapsedGroups = next;
+  }
+
+  private _rowFor(client: Client): ClientRow {
+    const restricted = client.assigned_policy_ids.length > 0;
+    const policy = restricted ? this.state.policies.find((p) => p.id === client.assigned_policy_ids[0]) : undefined;
+    return {
+      client,
+      owner: this._ownerFor(client),
+      restricted,
+      currentPolicy: policy ? policy.name : "Default",
+      nextChange: policy?.time_schedule?.time_to || "-",
+    };
+  }
+
+  private _groupedClients(): GroupedSection[] {
+    const assigned = new Set<string>();
+    const sections: GroupedSection[] = [];
+
+    for (const group of this.state.groups) {
+      const rows = group.client_names
+        .map((cn) => this.state.clients.find((c) => c.name === cn))
+        .filter(Boolean)
+        .map((c) => this._rowFor(c!));
+      if (rows.length === 0) continue;
+      rows.forEach((r) => assigned.add(r.client.name));
+      sections.push({ name: group.name, groupId: group.id, rows, collapsed: this._collapsedGroups.has(group.id) });
+    }
+
+    const ungrouped = this.state.clients
+      .filter((c) => !assigned.has(c.name))
+      .map((c) => this._rowFor(c));
+    if (ungrouped.length > 0) {
+      sections.push({ name: "Ungrouped", groupId: null, rows: ungrouped, collapsed: this._collapsedGroups.has("__ungrouped__") });
+    }
+    return sections;
   }
 
   private _clientRows(): ClientRow[] {
@@ -148,21 +197,26 @@ export class DashboardView extends LitElement {
         </div>
         ${rows.length === 0
           ? html`<div class="empty-state">No clients configured yet.</div>`
-          : html`
-              <table class="table">
-                <thead>
-                  <tr>
-                    <th>Client</th>
-                    <th>Member</th>
-                    <th>Status</th>
-                    <th>Current Policy</th>
-                    <th>Next Change</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${rows.slice(0, 6).map(
-                    (row) => html`
+          : this._groupedClients().map((section) => html`
+              <div class="group-section">
+                <div class="group-header" @click=${() => this._toggleGroup(section.groupId ?? "__ungrouped__")}>
+                  <span class="group-chevron">${section.collapsed ? "▸" : "▾"}</span>
+                  <span class="group-name">${section.name}</span>
+                  <span class="group-count">${section.rows.length}</span>
+                </div>
+                ${!section.collapsed ? html`
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Client</th>
+                      <th>Member</th>
+                      <th>Status</th>
+                      <th>Current Policy</th>
+                      <th>Next Change</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${section.rows.map((row) => html`
                       <tr class="clickable" @click=${() => this.onNavigate?.("client-detail", row.client)}>
                         <td>
                           <div class="client-cell">
@@ -181,15 +235,13 @@ export class DashboardView extends LitElement {
                         </td>
                         <td>${row.currentPolicy}</td>
                         <td>${row.nextChange}</td>
-                        <td class="menu-cell">
-                          <span class="icon-btn">${this._icon(ICONS.dots, 16)}</span>
-                        </td>
                       </tr>
-                    `
-                  )}
-                </tbody>
-              </table>
-            `}
+                    `)}
+                  </tbody>
+                </table>
+                ` : ""}
+              </div>
+            `)}
       </div>
 
       <div class="bottom-grid">
@@ -286,6 +338,13 @@ export class DashboardView extends LitElement {
       .link-btn:hover { text-decoration: underline; }
 
       .clients-card .table { margin-top: 6px; }
+      .group-section { border-top: 1px solid var(--agpc-border); }
+      .group-section:first-of-type { border-top: none; }
+      .group-header { display:flex; align-items:center; gap:8px; padding:10px 4px; cursor:pointer; user-select:none; font-size:13px; font-weight:600; color:var(--agpc-text); }
+      .group-header:hover { color:var(--agpc-blue); }
+      .group-chevron { width:14px; text-align:center; font-size:11px; color:var(--agpc-text-dim); transition:transform .15s; }
+      .group-name { flex:1; }
+      .group-count { font-size:11px; font-weight:500; color:var(--agpc-text-faint); background:var(--agpc-card-bg); padding:2px 7px; border-radius:8px; border:1px solid var(--agpc-border); }
       .client-cell { display: flex; align-items: center; gap: 10px; }
       .client-icon {
         width: 30px; height: 30px; border-radius: 8px; background: rgba(255,255,255,0.05);
