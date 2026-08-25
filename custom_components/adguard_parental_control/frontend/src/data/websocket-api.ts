@@ -207,6 +207,11 @@ export class AdguardWebsocketApi {
     });
   }
 
+  // Client Query Log
+  async getClientQueryLog(clientId: string, options: { limit?: number; search?: string; responseStatus?: string } = {}): Promise<QueryLogResponse> {
+    return this.hass.callWS({ type: "adguard_pc/clients/querylog", client_id: clientId, limit: options.limit ?? 100, search: options.search ?? "", response_status: options.responseStatus ?? "" });
+  }
+
   // Clients
   async listClients(): Promise<Client[]> {
     return this.hass.callWS({ type: "adguard_pc/clients/list" });

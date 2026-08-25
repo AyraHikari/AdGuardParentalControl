@@ -427,6 +427,63 @@ async def ws_members_querylog(
     connection.send_result(msg["id"], {"oldest": cursor, "data": merged})
 
 
+# ── Client Query Log ───────────────────────────────────────
+
+@websocket_api.websocket_command({
+    "type": "adguard_pc/clients/querylog",
+    "client_id": str,
+    "limit": int,
+    "search": str,
+    "response_status": str,
+})
+@websocket_api.async_response
+@_safe
+async def ws_clients_querylog(hass: HomeAssistant, connection: ActiveConnection, msg: dict) -> None:
+    """Return recent AdGuard DNS queries for one configured client."""
+    coordinator = _get_coordinator(hass)
+    client = coordinator.state.find_client(msg["client_id"])
+    if client is None:
+        raise ValueError("Client not found")
+    limit = max(1, min(int(msg.get("limit", 100)), 200))
+    search = str(msg.get("search", "")).strip().lower()
+    response_status = str(msg.get("response_status", "")).strip() or None
+    identities = [str(identity).strip() for identity in client.ids if str(identity).strip()]
+    if not identities:
+        connection.send_result(msg["id"], {"oldest": "", "data": []})
+        return
+    import asyncio
+    async def fetch(identity: str) -> dict:
+        try:
+            return await coordinator.api.get_query_log(search=identity, response_status=response_status)
+        except Exception as err:
+            _LOGGER.debug("Query log lookup failed for %s: %s", identity, err)
+            return {"oldest": "", "data": []}
+    payloads = await asyncio.gather(*(fetch(identity) for identity in identities))
+    merged: list[dict] = []
+    seen: set[tuple[str, str, str]] = set()
+    oldest_values: list[str] = []
+    for identity, payload in zip(identities, payloads):
+        if payload.get("oldest"):
+            oldest_values.append(str(payload["oldest"]))
+        for item in payload.get("data", []):
+            if not isinstance(item, dict):
+                continue
+            question = item.get("question") or {}
+            host = str(question.get("host", ""))
+            qtype = str(question.get("type", ""))
+            if search and search not in host.lower():
+                continue
+            item = {**item, "client_id": identity, "member_client": client.name}
+            key = (str(item.get("time", "")), host, qtype)
+            if key not in seen:
+                seen.add(key)
+                merged.append(item)
+    merged.sort(key=lambda x: str(x.get("time", "")), reverse=True)
+    merged = merged[:limit]
+    cursor = min(oldest_values) if oldest_values else (str(merged[-1].get("time", "")) if merged else "")
+    connection.send_result(msg["id"], {"oldest": cursor, "data": merged})
+
+
 # ── Clients CRUD ──────────────────────────────────────────
 
 
@@ -701,6 +758,7 @@ _ALL_HANDLERS = [
     ws_members_update,
     ws_members_delete,
     ws_members_querylog,
+    ws_clients_querylog,
     ws_clients_list,
     ws_clients_create,
     ws_clients_update,
