@@ -5,4 +5,8 @@ import "./views/override-view";
 import "./views/group-view";
 import "./views/member-view";
 import "./views/profile-view";
+import "./views/list-view";
+import "./views/placeholder-view";
+import "./components/sidebar";
+import "./components/topbar";
 import "./adguard-panel";
