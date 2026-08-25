@@ -347,6 +347,7 @@ async def ws_members_delete(
         "limit": int,
         "search": str,
         "response_status": str,
+        "older_than": str,
     }
 )
 @websocket_api.async_response
@@ -367,6 +368,8 @@ async def ws_members_querylog(
     # AGH query-log search understands client IPs. Query each configured
     # client identity and merge the results so one member can have several
     # devices without maintaining a duplicate local DNS log database.
+    older_than = str(msg.get("older_than", "")).strip() or None
+
     queries: list[tuple[str, str]] = []
     for client_name in member.client_names:
         client = coordinator.state.find_client(client_name)
@@ -389,6 +392,7 @@ async def ws_members_querylog(
         try:
             data = await coordinator.api.get_query_log(
                 search=identity,
+                older_than=older_than,
                 response_status=response_status,
             )
             return client_name, identity, data
@@ -407,13 +411,14 @@ async def ws_members_querylog(
         for item in payload.get("data", []):
             if not isinstance(item, dict):
                 continue
-            host = str(item.get("question", {}).get("host", ""))
+            question = item.get("question") or {}
+            host = str(question.get("name", "") or question.get("host", ""))
             if search and search not in host.lower() and search not in str(item.get("client", "")).lower():
                 continue
             # Keep a stable client name from our own inventory even when AGH
             # returns the raw IP address.
             item = {**item, "member_client": client_name, "client_id": identity}
-            key = (str(item.get("time", "")), host, str(item.get("client", "")), str(item.get("question", {}).get("type", "")))
+            key = (str(item.get("time", "")), host, str(item.get("client", "")), str(question.get("type", "")))
             if key not in seen:
                 seen.add(key)
                 merged.append(item)
@@ -435,6 +440,7 @@ async def ws_members_querylog(
     "limit": int,
     "search": str,
     "response_status": str,
+    "older_than": str,
 })
 @websocket_api.async_response
 @_safe
@@ -447,6 +453,7 @@ async def ws_clients_querylog(hass: HomeAssistant, connection: ActiveConnection,
     limit = max(1, min(int(msg.get("limit", 100)), 200))
     search = str(msg.get("search", "")).strip().lower()
     response_status = str(msg.get("response_status", "")).strip() or None
+    older_than = str(msg.get("older_than", "")).strip() or None
     identities = [str(identity).strip() for identity in client.ids if str(identity).strip()]
     if not identities:
         connection.send_result(msg["id"], {"oldest": "", "data": []})
@@ -454,7 +461,7 @@ async def ws_clients_querylog(hass: HomeAssistant, connection: ActiveConnection,
     import asyncio
     async def fetch(identity: str) -> dict:
         try:
-            return await coordinator.api.get_query_log(search=identity, response_status=response_status)
+            return await coordinator.api.get_query_log(search=identity, older_than=older_than, response_status=response_status)
         except Exception as err:
             _LOGGER.debug("Query log lookup failed for %s: %s", identity, err)
             return {"oldest": "", "data": []}
@@ -469,7 +476,7 @@ async def ws_clients_querylog(hass: HomeAssistant, connection: ActiveConnection,
             if not isinstance(item, dict):
                 continue
             question = item.get("question") or {}
-            host = str(question.get("host", ""))
+            host = str(question.get("name", "") or question.get("host", ""))
             qtype = str(question.get("type", ""))
             if search and search not in host.lower():
                 continue

@@ -1,7 +1,10 @@
 import { LitElement, html, css, PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { Member, GlobalState, QueryLogEntry } from "../data/websocket-api";
+import { Member, GlobalState, QueryLogEntry, qhost } from "../data/websocket-api";
 import { lookupService, serviceIcon } from "../data/services-registry";
+
+/** 24-hour cutoff as an ISO time string. */
+const _24hAgoISO = () => new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
 const ICONS = {
   arrow: "M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z",
@@ -30,6 +33,8 @@ export class MemberView extends LitElement {
   @state() private _queryType = "all";
   @state() private _queryClient = "all";
   @state() private _queryError = "";
+  @state() private _queryOldest = "";
+  @state() private _queryFullyLoaded = false;
 
   private _queryTimer?: number;
 
@@ -44,7 +49,13 @@ export class MemberView extends LitElement {
   }
 
   updated(changed: PropertyValues) {
-    if (changed.has("member")) this._loadQueryLog();
+    if (changed.has("member")) {
+      /* Reset pagination state so a new full load starts. */
+      this._queryLogs = [];
+      this._queryOldest = "";
+      this._queryFullyLoaded = false;
+      this._loadQueryLog();
+    }
   }
 
   render() {
@@ -181,13 +192,13 @@ export class MemberView extends LitElement {
             ${this._queryError ? html`<div class="query-error">${this._queryError}</div>` : ""}
             <div class="query-table-wrap">
               <table class="table query-table">
-                <thead><tr><th>TIME</th><th>CLIENT</th><th>DOMAIN <small>(Request URL)</small></th><th>ACTION</th><th>TYPE</th></tr></thead>
+                <thead><tr><th>TIME</th><th>CLIENT</th><th>DOMAIN</th><th>ACTION</th><th>TYPE</th></tr></thead>
                 <tbody>
                   ${this._filteredLogs().slice(0, 50).map((q) => html`
                     <tr>
                       <td class="time">${this._formatTime(q.time)}</td>
                       <td>${q.member_client || q.client}</td>
-                      <td><div class="domain-cell"><span class="svc-icon">${serviceIcon(q.question?.host || "", 18)}</span><strong>${q.question?.host || "—"}</strong></div></td>
+                      <td><div class="domain-cell"><span class="svc-icon">${serviceIcon(qhost(q), 18)}</span><strong>${qhost(q) || "—"}</strong></div></td>
                       <td>${this._isBlocked(q) ? html`<span class="pill red">BLOCKED</span>` : html`<span class="pill green">PROCESSED</span>`}</td>
                       <td>${q.question?.type || "A"}</td>
                     </tr>
@@ -281,7 +292,7 @@ export class MemberView extends LitElement {
 
   private _filteredLogs() {
     return this._queryLogs.filter((q) => {
-      const host = q.question?.host?.toLowerCase() || "";
+      const host = qhost(q).toLowerCase();
       const client = q.member_client || q.client || "";
       const searchOk = !this._querySearch.trim() || host.includes(this._querySearch.trim().toLowerCase());
       const clientOk = this._queryClient === "all" || client === this._queryClient;
@@ -300,12 +311,83 @@ export class MemberView extends LitElement {
 
   private _startQueryPolling() { this._stopQueryPolling(); if (this._queryLive) { this._loadQueryLog(); this._queryTimer = window.setInterval(() => this._loadQueryLog(), 5000); } }
   private _stopQueryPolling() { if (this._queryTimer) { window.clearInterval(this._queryTimer); this._queryTimer = undefined; } }
+  /** Load query logs.  On the very first call (empty list) paginate forward
+   *  until the oldest entry is within 24 h.  Subsequent live-poll calls only
+   *  fetch the latest page and prepend new entries. */
   private async _loadQueryLog() {
     if (!this.member || !this.hass || this._queryLoading) return;
     this._queryLoading = true;
     try {
-      const data = await this.hass.callWS({ type: "adguard_pc/members/querylog", member_id: this.member.id, limit: 80, search: "", response_status: "" });
-      this._queryLogs = data?.data || [];
+      const isFullLoad = this._queryLogs.length === 0;
+      const limit = isFullLoad ? 200 : 80;
+      const olderThan = isFullLoad ? "" : this._queryOldest;
+
+      const data = await this.hass.callWS({
+        type: "adguard_pc/members/querylog",
+        member_id: this.member.id,
+        limit,
+        search: "",
+        response_status: "",
+        older_than: olderThan,
+      });
+
+      const entries: QueryLogEntry[] = data?.data || [];
+      const newOldest: string = data?.oldest || "";
+
+      if (isFullLoad) {
+        this._queryLogs = entries;
+        this._queryOldest = newOldest;
+
+        /* Auto-paginate until oldest entry is within 24 h. */
+        const cutoff = new Date(_24hAgoISO()).getTime();
+        while (
+          newOldest &&
+          entries.length >= limit &&
+          entries.length > 0
+        ) {
+          const lastEntry = entries[entries.length - 1];
+          const lastTime = new Date(lastEntry.time).getTime();
+          if (lastTime <= cutoff) break;
+
+          const page = await this.hass.callWS({
+            type: "adguard_pc/members/querylog",
+            member_id: this.member.id,
+            limit,
+            search: "",
+            response_status: "",
+            older_than: this._queryOldest,
+          });
+
+          const pageEntries: QueryLogEntry[] = page?.data || [];
+          if (!pageEntries.length) break;
+
+          this._queryLogs = [...this._queryLogs, ...pageEntries];
+          this._queryOldest = page?.oldest || "";
+
+          /* Stop once we've reached or passed the 24 h boundary. */
+          const oldestEntry = pageEntries[pageEntries.length - 1];
+          if (new Date(oldestEntry.time).getTime() <= cutoff) break;
+          if (!page?.oldest) break;
+        }
+        this._queryFullyLoaded = true;
+      } else {
+        /* Live poll: prepend new entries, drop anything older than 24 h. */
+        if (entries.length) {
+          const existingKeys = new Set(
+            this._queryLogs.map((e) => `${e.time}|${qhost(e)}|${e.question?.type}`)
+          );
+          const fresh = entries.filter(
+            (e) => !existingKeys.has(`${e.time}|${qhost(e)}|${e.question?.type}`)
+          );
+          if (fresh.length) {
+            const cutoff = new Date(_24hAgoISO()).getTime();
+            this._queryLogs = [...fresh, ...this._queryLogs].filter(
+              (e) => new Date(e.time).getTime() > cutoff
+            );
+          }
+        }
+      }
+
       this._queryError = "";
     } catch (err) {
       this._queryError = err instanceof Error ? err.message : "Unable to load AdGuard query log";

@@ -1,9 +1,12 @@
 import { LitElement, html, css, svg, nothing, PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { Client, GlobalState, Policy, QueryLogEntry } from "../data/websocket-api";
+import { Client, GlobalState, Policy, QueryLogEntry, qhost } from "../data/websocket-api";
 import { sharedStyles } from "../styles/theme";
 import { ICONS } from "../icons";
 import { lookupService, serviceIcon } from "../data/services-registry";
+
+/** 24-hour cutoff as an ISO time string. */
+const _24hAgoISO = () => new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
 type Tab = "general" | "policies" | "rules" | "overrides" | "activity";
 
@@ -20,13 +23,15 @@ export class ClientView extends LitElement {
   @state() private _queryLive=true;
   @state() private _queryError="";
   @state() private _querySearch="";
+  @state() private _queryOldest="";
+  @state() private _queryFullyLoaded=false;
   @state() private _selectedPolicyId:string|null=null;
   @state() private _showDeleteConfirm=false;
   private _queryTimer?:number;
 
   connectedCallback(){ super.connectedCallback(); this._startQueryPolling(); }
   disconnectedCallback(){ super.disconnectedCallback(); this._stopQueryPolling(); }
-  updated(changed:PropertyValues){ if(changed.has("client")){this._selectedPolicyId=this.client?.assigned_policy_ids?.[0]||null;this._loadQueryLog();} }
+  updated(changed:PropertyValues){ if(changed.has("client")){this._selectedPolicyId=this.client?.assigned_policy_ids?.[0]||null;this._queryLogs=[];this._queryOldest="";this._queryFullyLoaded=false;this._loadQueryLog();} }
   private _icon(path:string,size=16){return svg`<svg viewBox="0 0 24 24" width="${size}" height="${size}"><path fill="currentColor" d="${path}"></path></svg>`;}
   private get _group(){return this.state.groups.find(g=>g.client_names.includes(this.client.name))||null;}
   private get _member(){return this.state.members.find(m=>m.client_names.includes(this.client.name))||null;}
@@ -43,13 +48,13 @@ export class ClientView extends LitElement {
   private _time(v:string){const d=new Date(v);return Number.isNaN(d.getTime())?v.slice(11,19):d.toLocaleTimeString([], {hour12:false});}
   private _response(q:QueryLogEntry){return q.answer?.[0]?.value||q.status||"—";}
   private _ms(q:QueryLogEntry){const n=Number.parseFloat(q.elapsedMs||"");return Number.isFinite(n)?`${Math.round(n)} ms`:q.elapsedMs||"—";}
-  private _logs(){const search=this._querySearch.toLowerCase().trim();return this._queryLogs.filter(q=>!search||(q.question?.host||"").toLowerCase().includes(search));}
-  private _topDomains(){const m=new Map<string,any>();for(const q of this._queryLogs){const k=q.question?.host||"unknown",v=m.get(k)||{requests:0,blocked:0,processed:0,totalMs:0};v.requests++;if(this._blocked(q))v.blocked++;else{v.processed++;const ms=Number.parseFloat(q.elapsedMs||"");if(Number.isFinite(ms))v.totalMs+=ms;}m.set(k,v);}return [...m.entries()].sort((a,b)=>b[1].requests-a[1].requests).slice(0,5);}
-  private _topServices(){const m=new Map<string,any>();for(const q of this._queryLogs){const s=lookupService(q.question?.host||""),k=s?.name||q.question?.host||"unknown",v=m.get(k)||{service:s,requests:0,blocked:0,processed:0,totalMs:0};v.requests++;if(this._blocked(q))v.blocked++;else{v.processed++;const ms=Number.parseFloat(q.elapsedMs||"");if(Number.isFinite(ms))v.totalMs+=ms;}m.set(k,v);}return [...m.entries()].sort((a,b)=>b[1].requests-a[1].requests).slice(0,5);}
+  private _logs(){const search=this._querySearch.toLowerCase().trim();return this._queryLogs.filter(q=>!search||(qhost(q)).toLowerCase().includes(search));}
+  private _topDomains(){const m=new Map<string,any>();for(const q of this._queryLogs){const k=qhost(q)||"unknown",v=m.get(k)||{requests:0,blocked:0,processed:0,totalMs:0};v.requests++;if(this._blocked(q))v.blocked++;else{v.processed++;const ms=Number.parseFloat(q.elapsedMs||"");if(Number.isFinite(ms))v.totalMs+=ms;}m.set(k,v);}return [...m.entries()].sort((a,b)=>b[1].requests-a[1].requests).slice(0,5);}
+  private _topServices(){const m=new Map<string,any>();for(const q of this._queryLogs){const s=lookupService(qhost(q)),k=s?.name||qhost(q)||"unknown",v=m.get(k)||{service:s,requests:0,blocked:0,processed:0,totalMs:0};v.requests++;if(this._blocked(q))v.blocked++;else{v.processed++;const ms=Number.parseFloat(q.elapsedMs||"");if(Number.isFinite(ms))v.totalMs+=ms;}m.set(k,v);}return [...m.entries()].sort((a,b)=>b[1].requests-a[1].requests).slice(0,5);}
   private _serviceIcon(host:string,size=21){return serviceIcon(host,size);}
   private _startQueryPolling(){this._stopQueryPolling();if(this._queryLive){this._loadQueryLog();this._queryTimer=window.setInterval(()=>this._loadQueryLog(),5000);}}
   private _stopQueryPolling(){if(this._queryTimer)window.clearInterval(this._queryTimer);this._queryTimer=undefined;}
-  private async _loadQueryLog(){if(!this.client||!this.hass||this._queryLoading)return;this._queryLoading=true;try{const d=await this.hass.callWS({type:"adguard_pc/clients/querylog",client_id:this.client.name,limit:120,search:"",response_status:""});this._queryLogs=d?.data||[];this._queryError="";}catch(e){this._queryError=e instanceof Error?e.message:"Unable to load AdGuard query log";}finally{this._queryLoading=false;}}
+  private async _loadQueryLog(){if(!this.client||!this.hass||this._queryLoading)return;this._queryLoading=true;try{const isFullLoad=this._queryLogs.length===0;const limit=isFullLoad?200:120;const olderThan=isFullLoad?"":this._queryOldest;const d=await this.hass.callWS({type:"adguard_pc/clients/querylog",client_id:this.client.name,limit,search:"",response_status:"",older_than:olderThan});const entries:QueryLogEntry[]=d?.data||[];const newOldest:string=d?.oldest||"";if(isFullLoad){this._queryLogs=entries;this._queryOldest=newOldest;const cutoff=new Date(_24hAgoISO()).getTime();let curOldest=newOldest;let curEntries=entries;while(curOldest&&curEntries.length>=limit&&curEntries.length>0){const lastEntry=curEntries[curEntries.length-1];if(new Date(lastEntry.time).getTime()<=cutoff)break;const page=await this.hass.callWS({type:"adguard_pc/clients/querylog",client_id:this.client.name,limit,search:"",response_status:"",older_than:curOldest});const pageEntries:QueryLogEntry[]=page?.data||[];if(!pageEntries.length)break;this._queryLogs=[...this._queryLogs,...pageEntries];curOldest=page?.oldest||"";this._queryOldest=curOldest;curEntries=pageEntries;if(new Date(pageEntries[pageEntries.length-1].time).getTime()<=cutoff)break;if(!page?.oldest)break;}this._queryFullyLoaded=true;}else{if(entries.length){const existingKeys=new Set(this._queryLogs.map((e:QueryLogEntry)=>`${e.time}|${qhost(e)}|${e.question?.type}`));const fresh=entries.filter((e:QueryLogEntry)=>!existingKeys.has(`${e.time}|${qhost(e)}|${e.question?.type}`));if(fresh.length){const cutoff=new Date(_24hAgoISO()).getTime();this._queryLogs=[...fresh,...this._queryLogs].filter((e:QueryLogEntry)=>new Date(e.time).getTime()>cutoff);}}}this._queryError="";}catch(e){this._queryError=e instanceof Error?e.message:"Unable to load AdGuard query log";}finally{this._queryLoading=false;}}
 
   render(){if(!this.client)return html``;const p=this._activePolicy,g=this._group,m=this._member,profile=p?.profile_id?this.state.profiles.find(x=>x.id===p.profile_id):null,restricted=!!p&&this._mode(p)!=="NORMAL";return html`
     <div class="page">
@@ -70,7 +75,7 @@ export class ClientView extends LitElement {
       </main>
       <aside class="query-panel card"><div class="query-head"><div><h2>Service / Domain History</h2><small>Latest DNS queries for this client</small></div><div class="query-actions"><select class="compact-select"><option>Last 24 hours</option></select><button class="icon-btn" @click=${this._loadQueryLog}>↻</button></div></div>
         <div class="query-search"><input class="field" placeholder="Search domain…" .value=${this._querySearch} @input=${(e:Event)=>this._querySearch=(e.target as HTMLInputElement).value}></div>
-        <div class="query-table-wrap"><table class="table query-table"><thead><tr><th>TIME</th><th>DOMAIN / SERVICE</th><th>TYPE</th><th>RESPONSE</th><th>STATUS</th><th>DETAILS</th></tr></thead><tbody>${this._logs().slice(0,12).map(q=>html`<tr><td class="time">${this._time(q.time)}</td><td><div class="domain-cell">${this._serviceIcon(q.question?.host||"")}<strong>${q.question?.host||"—"}</strong></div></td><td>${q.question?.type||"A"}</td><td class="response">${this._response(q)}</td><td>${this._blocked(q)?html`<span class="pill red">Blocked</span>`:html`<span class="pill green">Processed</span>`}</td><td class="details">${this._blocked(q)?"✕ Blocklist":this._ms(q)}</td></tr>`)}</tbody></table>${this._queryLoading&&!this._queryLogs.length?html`<div class="empty">Loading query log…</div>`:nothing}${this._queryError?html`<div class="query-error">${this._queryError}</div>`:nothing}${!this._queryLoading&&!this._logs().length?html`<div class="empty">No DNS queries found for this client.</div>`:nothing}</div>
+        <div class="query-table-wrap"><table class="table query-table"><thead><tr><th>TIME</th><th>DOMAIN / SERVICE</th><th>TYPE</th><th>RESPONSE</th><th>STATUS</th><th>DETAILS</th></tr></thead><tbody>${this._logs().slice(0,12).map(q=>html`<tr><td class="time">${this._time(q.time)}</td><td><div class="domain-cell">${this._serviceIcon(qhost(q))}<strong>${qhost(q)||"—"}</strong></div></td><td>${q.question?.type||"A"}</td><td class="response">${this._response(q)}</td><td>${this._blocked(q)?html`<span class="pill red">Blocked</span>`:html`<span class="pill green">Processed</span>`}</td><td class="details">${this._blocked(q)?"✕ Blocklist":this._ms(q)}</td></tr>`)}</tbody></table>${this._queryLoading&&!this._queryLogs.length?html`<div class="empty">Loading query log…</div>`:nothing}${this._queryError?html`<div class="query-error">${this._queryError}</div>`:nothing}${!this._queryLoading&&!this._logs().length?html`<div class="empty">No DNS queries found for this client.</div>`:nothing}</div>
         <div class="query-foot"><span class="live-label"><i class=${this._queryLive?"on":""}></i>${this._queryLive?"Live":"Paused"}</span><button class="icon-btn" @click=${()=>{this._queryLive=!this._queryLive;this._queryLive?this._startQueryPolling():this._stopQueryPolling();}}>${this._queryLive?"Ⅱ":"▶"}</button><button class="btn small" @click=${()=>this.onNavigate?.("logs")}>View Full Query Log</button></div>
       </aside></div>
     </div>

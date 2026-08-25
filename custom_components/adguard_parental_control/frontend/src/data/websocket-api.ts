@@ -96,7 +96,7 @@ export interface QueryLogEntry {
   client: string;
   client_id?: string;
   member_client?: string;
-  question: { host: string; type: string; class?: string };
+  question: { host?: string; name?: string; type: string; class?: string };
   answer?: Array<{ type: string; value: string; ttl?: number }>;
   elapsedMs?: string;
   reason?: string;
@@ -121,6 +121,12 @@ export interface Status {
   profiles_count: number;
   groups_count: number;
   members_count: number;
+}
+
+/** Extract the queried hostname from a query-log entry.  AGH ≥0.108 uses
+ *  ``question.name``; older versions used ``question.host``. */
+export function qhost(q: QueryLogEntry): string {
+  return q.question?.name || q.question?.host || "";
 }
 
 export class AdguardWebsocketApi {
@@ -196,7 +202,7 @@ export class AdguardWebsocketApi {
   // Member Query Log
   async getMemberQueryLog(
     memberId: string,
-    options: { limit?: number; search?: string; responseStatus?: string } = {}
+    options: { limit?: number; search?: string; responseStatus?: string; olderThan?: string } = {}
   ): Promise<QueryLogResponse> {
     return this.hass.callWS({
       type: "adguard_pc/members/querylog",
@@ -204,12 +210,13 @@ export class AdguardWebsocketApi {
       limit: options.limit ?? 50,
       search: options.search ?? "",
       response_status: options.responseStatus ?? "",
+      older_than: options.olderThan ?? "",
     });
   }
 
   // Client Query Log
-  async getClientQueryLog(clientId: string, options: { limit?: number; search?: string; responseStatus?: string } = {}): Promise<QueryLogResponse> {
-    return this.hass.callWS({ type: "adguard_pc/clients/querylog", client_id: clientId, limit: options.limit ?? 100, search: options.search ?? "", response_status: options.responseStatus ?? "" });
+  async getClientQueryLog(clientId: string, options: { limit?: number; search?: string; responseStatus?: string; olderThan?: string } = {}): Promise<QueryLogResponse> {
+    return this.hass.callWS({ type: "adguard_pc/clients/querylog", client_id: clientId, limit: options.limit ?? 100, search: options.search ?? "", response_status: options.responseStatus ?? "", older_than: options.olderThan ?? "" });
   }
 
   // Clients
