@@ -32,9 +32,10 @@ class AdGuardHomeAPI:
         return f"{self._base_url}{path}"
 
     def _headers(self) -> dict[str, str]:
-        h = {"Content-Type": "application/json"}
+        h: dict[str, str] = {"Content-Type": "application/json"}
         if self._token:
-            h["Authorization"] = f"Bearer {self._token}"
+            # AdGuard Home uses cookie-based session auth
+            h["Cookie"] = f"session_id={self._token}"
         return h
 
     async def _request(
@@ -73,7 +74,12 @@ class AdGuardHomeAPI:
     # ── Auth ──────────────────────────────────────────────────
 
     async def login(self) -> bool:
-        """Authenticate and store token."""
+        """Authenticate and store token.
+
+        AdGuard Home /control/login returns ``text/plain`` ("OK") on
+        success.  The session token is delivered via the ``Set-Cookie``
+        header as ``session_id=<token>``.
+        """
         try:
             async with self._session.post(
                 self._url("/control/login"),
@@ -81,9 +87,28 @@ class AdGuardHomeAPI:
                 ssl=None if self._verify_ssl else False,
             ) as resp:
                 resp.raise_for_status()
-                data = await resp.json()
-                self._token = data.get("token")
-                return self._token is not None
+                # Try cookie-based token first (standard AdGuard Home)
+                token: str | None = None
+                set_cookie = resp.headers.get("Set-Cookie", "")
+                for part in set_cookie.split(";"):
+                    kv = part.strip().split("=", 1)
+                    if len(kv) == 2 and kv[0].strip() == "session_id":
+                        token = kv[1].strip()
+                        break
+                # Fallback: some builds return JSON with "token"
+                if token is None and "application/json" in resp.content_type:
+                    data = await resp.json()
+                    token = data.get("token")
+                # Fallback: body may be the token itself
+                if token is None:
+                    body = (await resp.text()).strip()
+                    if body and body != "OK":
+                        token = body
+                self._token = token
+                if self._token:
+                    return True
+                _LOGGER.warning("AdGuard login succeeded but no token found")
+                return False
         except aiohttp.ClientError as err:
             _LOGGER.error("AdGuard login failed: %s", err)
             return False
