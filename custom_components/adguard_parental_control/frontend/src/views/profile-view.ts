@@ -34,17 +34,21 @@ export class ProfileView extends LitElement {
         <div class="card-content">
           <div class="meta-row">
             <span class="meta">Default: <strong>${this.profile.default_action}</strong></span>
-            <mwc-button dense label="Toggle Default" @click=${this._toggleDefault}></mwc-button>
+            <button class="btn btn-sm" @click=${this._toggleDefault}>Toggle Default</button>
           </div>
         </div>
       </ha-card>
 
       ${this._showDeleteConfirm ? html`
-        <ha-dialog open @closed=${this._handleDeleteDialog}>
-          <p>Delete profile "${this.profile.name}"?</p>
-          <mwc-button slot="secondaryAction" @click=${() => { this._showDeleteConfirm = false; }}>Cancel</mwc-button>
-          <mwc-button slot="primaryAction" @click=${this._deleteProfile}>Delete</mwc-button>
-        </ha-dialog>
+        <div class="modal-scrim" @click=${() => this._showDeleteConfirm = false}></div>
+        <div class="modal">
+          <div class="modal-head"><h3>Delete profile "${this.profile.name}"?</h3></div>
+          <div class="modal-body"><p>Policies using this profile will lose their template.</p></div>
+          <div class="modal-actions">
+            <button class="btn" @click=${() => this._showDeleteConfirm = false}>Cancel</button>
+            <button class="btn btn-danger" @click=${this._deleteProfile}>Delete</button>
+          </div>
+        </div>
       ` : ""}
 
       <!-- Rules -->
@@ -63,19 +67,19 @@ export class ProfileView extends LitElement {
                 @input=${(e: Event) => { this._newRuleTarget = (e.target as HTMLInputElement).value; }}
               ></ha-textfield>
               <ha-select label="Action" .value=${this._newRuleAction}
-                @selected=${(e: any) => { this._newRuleAction = e.detail.value; }}
+                @change=${(e: any) => { this._newRuleAction = (e.target as HTMLSelectElement).value as any; }}
               >
                 <ha-list-item value="block">Block</ha-list-item>
                 <ha-list-item value="allow">Allow</ha-list-item>
               </ha-select>
               <ha-select label="Type" .value=${this._newRuleType}
-                @selected=${(e: any) => { this._newRuleType = e.detail.value; }}
+                @change=${(e: any) => { this._newRuleType = (e.target as HTMLSelectElement).value as any; }}
               >
                 <ha-list-item value="domain">Domain</ha-list-item>
                 <ha-list-item value="service">Service</ha-list-item>
                 <ha-list-item value="category">Category</ha-list-item>
               </ha-select>
-              <mwc-button raised label="Add" @click=${this._addRule} .disabled=${!this._newRuleTarget.trim()}></mwc-button>
+              <button class="btn" @click=${this._addRule} ?disabled=${!this._newRuleTarget.trim()}>Add</button>
             </div>
           ` : ""}
           ${this.profile.rules.length === 0
@@ -162,6 +166,17 @@ export class ProfileView extends LitElement {
     .action-allow { color: var(--success-color, #4caf50); font-weight: 500; }
     .empty { color: var(--secondary-text-color); font-style: italic; margin: 0; }
     .add-form { padding: 12px 0; display: flex; flex-direction: column; gap: 8px; }
+    .modal-scrim { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:999; }
+    .modal { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:1000; background:var(--card-background-color,#1e1e1e); border:1px solid var(--divider-color,#333); border-radius:12px; padding:20px; min-width:320px; max-width:420px; box-shadow:0 8px 32px rgba(0,0,0,0.4); }
+    .modal-head h3 { margin:0 0 12px; font-size:16px; }
+    .modal-body p { margin:0 0 16px; color:var(--secondary-text-color,#999); font-size:13px; }
+    .modal-actions { display:flex; gap:8px; justify-content:flex-end; }
+    .btn { display:inline-flex; align-items:center; padding:8px 16px; border-radius:8px; border:1px solid var(--divider-color,#333); background:var(--card-background-color,#2a2a2a); color:var(--primary-text-color,#eee); cursor:pointer; font-size:13px; }
+    .btn:hover { background:var(--secondary-background-color,#333); }
+    .btn:disabled { opacity:0.4; cursor:default; }
+    .btn-danger { background:var(--error-color,#f44336); color:#fff; border-color:var(--error-color,#f44336); }
+    .btn-danger:hover { opacity:0.9; }
+    .btn-sm { padding:5px 12px; font-size:12px; }
   `;
 }
 

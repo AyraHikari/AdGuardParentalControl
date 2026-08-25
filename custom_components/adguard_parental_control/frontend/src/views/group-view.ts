@@ -33,11 +33,15 @@ export class GroupView extends LitElement {
       </ha-card>
 
       ${this._showDeleteConfirm ? html`
-        <ha-dialog open @closed=${this._handleDeleteDialog}>
-          <p>Delete group "${this.group.name}"?</p>
-          <mwc-button slot="secondaryAction" @click=${() => { this._showDeleteConfirm = false; }}>Cancel</mwc-button>
-          <mwc-button slot="primaryAction" @click=${this._deleteGroup}>Delete</mwc-button>
-        </ha-dialog>
+        <div class="modal-scrim" @click=${() => this._showDeleteConfirm = false}></div>
+        <div class="modal">
+          <div class="modal-head"><h3>Delete group "${this.group.name}"?</h3></div>
+          <div class="modal-body"><p>This cannot be undone.</p></div>
+          <div class="modal-actions">
+            <button class="btn" @click=${() => this._showDeleteConfirm = false}>Cancel</button>
+            <button class="btn btn-danger" @click=${this._deleteGroup}>Delete</button>
+          </div>
+        </div>
       ` : ""}
 
       <!-- Members -->
@@ -218,6 +222,15 @@ export class GroupView extends LitElement {
     .empty { color: var(--secondary-text-color); font-style: italic; margin: 0; }
     .add-row { margin-top: 8px; }
     ha-select { width: 100%; }
+    .modal-scrim { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:999; }
+    .modal { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:1000; background:var(--card-background-color,#1e1e1e); border:1px solid var(--divider-color,#333); border-radius:12px; padding:20px; min-width:320px; max-width:420px; box-shadow:0 8px 32px rgba(0,0,0,0.4); }
+    .modal-head h3 { margin:0 0 12px; font-size:16px; }
+    .modal-body p { margin:0 0 16px; color:var(--secondary-text-color,#999); font-size:13px; }
+    .modal-actions { display:flex; gap:8px; justify-content:flex-end; }
+    .btn { display:inline-flex; align-items:center; padding:8px 16px; border-radius:8px; border:1px solid var(--divider-color,#333); background:var(--card-background-color,#2a2a2a); color:var(--primary-text-color,#eee); cursor:pointer; font-size:13px; }
+    .btn:hover { background:var(--secondary-background-color,#333); }
+    .btn-danger { background:var(--error-color,#f44336); color:#fff; border-color:var(--error-color,#f44336); }
+    .btn-danger:hover { opacity:0.9; }
   `;
 }
 

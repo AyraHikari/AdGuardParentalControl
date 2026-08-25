@@ -32,8 +32,8 @@ export class OverrideView extends LitElement {
           <ha-select
             label="Target Type"
             .value=${this._selectedTargetType}
-            @selected=${(e: any) => {
-              this._selectedTargetType = e.detail.value;
+            @change=${(e: any) => {
+              this._selectedTargetType = (e.target as HTMLSelectElement).value as any;
               this._selectedTarget = "";
             }}
           >
@@ -44,7 +44,7 @@ export class OverrideView extends LitElement {
           <ha-select
             label="Target"
             .value=${this._selectedTarget}
-            @selected=${(e: any) => { this._selectedTarget = e.detail.value; }}
+            @change=${(e: any) => { this._selectedTarget = (e.target as HTMLSelectElement).value; }}
           >
             ${this._selectedTargetType === "client"
               ? this.state.clients.map(
@@ -58,7 +58,7 @@ export class OverrideView extends LitElement {
           <ha-select
             label="Action"
             .value=${this._selectedAction}
-            @selected=${(e: any) => { this._selectedAction = e.detail.value; }}
+            @change=${(e: any) => { this._selectedAction = (e.target as HTMLSelectElement).value; }}
           >
             <ha-list-item value="allow_all">Allow All</ha-list-item>
             <ha-list-item value="block_all">Block All</ha-list-item>
@@ -67,7 +67,7 @@ export class OverrideView extends LitElement {
           <ha-select
             label="Duration"
             .value=${this._selectedDuration}
-            @selected=${(e: any) => { this._selectedDuration = e.detail.value; }}
+            @change=${(e: any) => { this._selectedDuration = (e.target as HTMLSelectElement).value; }}
           >
             <ha-list-item value="15">15 minutes</ha-list-item>
             <ha-list-item value="30">30 minutes</ha-list-item>
@@ -78,12 +78,11 @@ export class OverrideView extends LitElement {
           </ha-select>
 
           <div class="form-actions">
-            <mwc-button
-              raised
-              label="Apply Override"
+            <button
+              class="btn btn-primary"
               @click=${this._applyOverride}
-              .disabled=${!this._selectedTarget}
-            ></mwc-button>
+              ?disabled=${!this._selectedTarget}
+            >Apply Override</button>
           </div>
         </div>
       </ha-card>
@@ -213,6 +212,16 @@ export class OverrideView extends LitElement {
       color: var(--secondary-text-color);
       font-style: italic;
     }
+    .btn {
+      display: inline-flex; align-items: center; padding: 8px 16px;
+      border-radius: 8px; border: 1px solid var(--divider-color, #333);
+      background: var(--card-background-color, #2a2a2a); color: var(--primary-text-color, #eee);
+      cursor: pointer; font-size: 13px;
+    }
+    .btn:hover { background: var(--secondary-background-color, #333); }
+    .btn:disabled { opacity: 0.4; cursor: default; }
+    .btn-primary { background: var(--primary-color, #03a9f4); color: #fff; border-color: var(--primary-color, #03a9f4); }
+    .btn-primary:hover { opacity: 0.9; }
   `;
 }
 

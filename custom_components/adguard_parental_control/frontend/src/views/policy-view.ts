@@ -44,11 +44,15 @@ export class PolicyView extends LitElement {
       </ha-card>
 
       ${this._showDeleteConfirm ? html`
-        <ha-dialog open @closed=${this._handleDeleteDialog}>
-          <p>Delete policy "${this.policy.name}"?</p>
-          <mwc-button slot="secondaryAction" @click=${() => { this._showDeleteConfirm = false; }}>Cancel</mwc-button>
-          <mwc-button slot="primaryAction" @click=${this._deletePolicy}>Delete</mwc-button>
-        </ha-dialog>
+        <div class="modal-scrim" @click=${() => this._showDeleteConfirm = false}></div>
+        <div class="modal">
+          <div class="modal-head"><h3>Delete policy "${this.policy.name}"?</h3></div>
+          <div class="modal-body"><p>This will remove the policy and unassign it from all groups and members.</p></div>
+          <div class="modal-actions">
+            <button class="btn" @click=${() => this._showDeleteConfirm = false}>Cancel</button>
+            <button class="btn btn-danger" @click=${this._deletePolicy}>Delete</button>
+          </div>
+        </div>
       ` : ""}
 
       <ha-card>
@@ -60,7 +64,7 @@ export class PolicyView extends LitElement {
             <p><strong>Current:</strong> ${this._getProfileName()}</p>
             <div class="add-row">
               <ha-select label="Assign profile" .value=${this.policy.profile_id || ""}
-                @selected=${(e: any) => { if (e.detail.value !== undefined) this._assignProfile(e.detail.value); }}
+                @change=${(e: any) => { const val = (e.target as HTMLSelectElement).value; if (val !== undefined) this._assignProfile(val); }}
               >
                 <ha-list-item value="">None</ha-list-item>
                 ${this.state.profiles.map((p) => html`
@@ -87,19 +91,19 @@ export class PolicyView extends LitElement {
                 @input=${(e: Event) => { this._newRuleTarget = (e.target as HTMLInputElement).value; }}
               ></ha-textfield>
               <ha-select label="Action" .value=${this._newRuleAction}
-                @selected=${(e: any) => { this._newRuleAction = e.detail.value; }}
+                @change=${(e: any) => { this._newRuleAction = (e.target as HTMLSelectElement).value as any; }}
               >
                 <ha-list-item value="block">Block</ha-list-item>
                 <ha-list-item value="allow">Allow</ha-list-item>
               </ha-select>
               <ha-select label="Type" .value=${this._newRuleType}
-                @selected=${(e: any) => { this._newRuleType = e.detail.value; }}
+                @change=${(e: any) => { this._newRuleType = (e.target as HTMLSelectElement).value as any; }}
               >
                 <ha-list-item value="domain">Domain</ha-list-item>
                 <ha-list-item value="service">Service</ha-list-item>
                 <ha-list-item value="category">Category</ha-list-item>
               </ha-select>
-              <mwc-button raised label="Add" @click=${this._addRule} .disabled=${!this._newRuleTarget.trim()}></mwc-button>
+              <button class="btn" @click=${this._addRule} ?disabled=${!this._newRuleTarget.trim()}>Add</button>
             </div>
           ` : ""}
           ${this.policy.rules.length === 0
@@ -141,7 +145,7 @@ export class PolicyView extends LitElement {
                 <div class="info-section">
                   <p><strong>Days:</strong> ${this.policy.time_schedule.days.join(", ") || "All"}</p>
                   <p><strong>Time:</strong> ${this.policy.time_schedule.time_from || "00:00"} - ${this.policy.time_schedule.time_to || "23:59"}</p>
-                  <mwc-button label="Remove" @click=${this._removeSchedule}></mwc-button>
+                  <button class="btn btn-sm" @click=${this._removeSchedule}>Remove</button>
                 </div>
               `
             : this._showAddSchedule
@@ -165,7 +169,7 @@ export class PolicyView extends LitElement {
                   <p><strong>Entity:</strong> ${this.policy.calendar_condition.calendar_entity || "None"}</p>
                   <p><strong>Match:</strong> ${this.policy.calendar_condition.event_match.join(", ") || "None"}</p>
                   <p><strong>Invert:</strong> ${this.policy.calendar_condition.invert ? "Yes" : "No"}</p>
-                  <mwc-button label="Remove" @click=${this._removeCalendar}></mwc-button>
+                  <button class="btn btn-sm" @click=${this._removeCalendar}>Remove</button>
                 </div>
               `
             : this._showAddCalendar
@@ -192,8 +196,8 @@ export class PolicyView extends LitElement {
         <ha-textfield label="To (HH:MM)" .value=${this._schedTo}
           @input=${(e: Event) => { this._schedTo = (e.target as HTMLInputElement).value; }}
         ></ha-textfield>
-        <mwc-button raised label="Save Schedule" @click=${this._saveSchedule}></mwc-button>
-        <mwc-button label="Cancel" @click=${() => { this._showAddSchedule = false; }}></mwc-button>
+        <button class="btn" @click=${this._saveSchedule}>Save Schedule</button>
+        <button class="btn" @click=${() => { this._showAddSchedule = false; }}>Cancel</button>
       </div>
     `;
   }
@@ -202,7 +206,7 @@ export class PolicyView extends LitElement {
     return html`
       <div class="add-form">
         <ha-select label="Calendar Entity" .value=${this._calEntity}
-          @selected=${(e: any) => { this._calEntity = e.detail.value; }}
+          @change=${(e: any) => { this._calEntity = (e.target as HTMLSelectElement).value; }}
         >
           ${this.state.calendar_entities.map(eid => html`
             <ha-list-item value="${eid}">${eid}</ha-list-item>
@@ -211,8 +215,8 @@ export class PolicyView extends LitElement {
         <ha-textfield label="Event keywords (comma-separated)" .value=${this._calMatch}
           @input=${(e: Event) => { this._calMatch = (e.target as HTMLInputElement).value; }}
         ></ha-textfield>
-        <mwc-button raised label="Save Condition" @click=${this._saveCalendar}></mwc-button>
-        <mwc-button label="Cancel" @click=${() => { this._showAddCalendar = false; }}></mwc-button>
+        <button class="btn" @click=${this._saveCalendar}>Save Condition</button>
+        <button class="btn" @click=${() => { this._showAddCalendar = false; }}>Cancel</button>
       </div>
     `;
   }
@@ -330,6 +334,17 @@ export class PolicyView extends LitElement {
     .info-section p { margin: 4px 0; }
     .add-row { margin-top: 8px; }
     ha-select { width: 100%; }
+    .modal-scrim { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:999; }
+    .modal { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:1000; background:var(--card-background-color,#1e1e1e); border:1px solid var(--divider-color,#333); border-radius:12px; padding:20px; min-width:320px; max-width:420px; box-shadow:0 8px 32px rgba(0,0,0,0.4); }
+    .modal-head h3 { margin:0 0 12px; font-size:16px; }
+    .modal-body p { margin:0 0 16px; color:var(--secondary-text-color,#999); font-size:13px; }
+    .modal-actions { display:flex; gap:8px; justify-content:flex-end; }
+    .btn { display:inline-flex; align-items:center; padding:8px 16px; border-radius:8px; border:1px solid var(--divider-color,#333); background:var(--card-background-color,#2a2a2a); color:var(--primary-text-color,#eee); cursor:pointer; font-size:13px; }
+    .btn:hover { background:var(--secondary-background-color,#333); }
+    .btn:disabled { opacity:0.4; cursor:default; }
+    .btn-danger { background:var(--error-color,#f44336); color:#fff; border-color:var(--error-color,#f44336); }
+    .btn-danger:hover { opacity:0.9; }
+    .btn-sm { padding:5px 12px; font-size:12px; }
   `;
 }
 

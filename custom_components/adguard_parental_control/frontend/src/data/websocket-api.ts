@@ -88,6 +88,7 @@ export interface ServiceInfo {
   name: string;
   icon: string;
   blocked: boolean;
+  categories: string[];
 }
 
 export interface QueryLogEntry {

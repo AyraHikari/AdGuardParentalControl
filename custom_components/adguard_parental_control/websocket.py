@@ -605,6 +605,7 @@ async def ws_services_list(
             "name": svc.get("name", ""),
             "icon": svc.get("icon_class", ""),
             "blocked": svc.get("id", "") in blocked_ids,
+            "categories": svc.get("categories", []),
         })
     connection.send_result(msg["id"], result)
 
