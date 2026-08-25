@@ -248,6 +248,28 @@ async def ws_groups_update(
 
 
 @websocket_api.websocket_command(
+    {"type": "adguard_pc/groups/assign_policy", "group_id": str, "policy_id": str}
+)
+@websocket_api.async_response
+@_safe
+async def ws_groups_assign_policy(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict
+) -> None:
+    """Assign a policy to a group without replacing other group fields."""
+    coordinator = _get_coordinator(hass)
+    group = coordinator.state.find_group(msg["group_id"])
+    policy = coordinator.state.find_policy(msg["policy_id"])
+    if group is None:
+        raise ValueError("Group not found")
+    if policy is None:
+        raise ValueError("Policy not found")
+    if policy.id not in group.assigned_policy_ids:
+        group.assigned_policy_ids.append(policy.id)
+        await coordinator.async_save_state()
+    connection.send_result(msg["id"], _group_dict(group))
+
+
+@websocket_api.websocket_command(
     {"type": "adguard_pc/groups/delete", "group_id": str}
 )
 @websocket_api.async_response
@@ -776,6 +798,7 @@ _ALL_HANDLERS = [
     ws_groups_create,
     ws_groups_update,
     ws_groups_delete,
+    ws_groups_assign_policy,
     ws_members_list,
     ws_members_create,
     ws_members_update,

@@ -71,7 +71,7 @@ export class PolicyView extends LitElement {
           <p>"${this._p.name}" will be removed and unassigned from all groups, members and clients.</p>
           <div class="modal-actions">
             <button class="btn" @click=${() => (this._showDeleteConfirm = false)}>Cancel</button>
-            <button class="btn danger" @click=${this._deletePolicy}>Delete</button>
+            <button class="btn btn-danger" @click=${this._deletePolicy}>Delete</button>
           </div>
         </div>
       ` : ""}
@@ -80,25 +80,27 @@ export class PolicyView extends LitElement {
 
   private _renderHeader() {
     return html`
-      <div class="header">
-        <div class="breadcrumb">Policies <span>›</span> <strong>${this._p.name || "Untitled"}</strong></div>
-        <div class="title-row">
-          <div>
-            <div class="title-line">
-              <h1>${this._p.name || "Untitled"}</h1>
-              <span class="status ${this._p.enabled !== false ? "on" : "off"}">${this._p.enabled !== false ? "Enabled" : "Disabled"}</span>
-            </div>
-            <div class="subtitle">Priority: ${this._p.priority} · Profile: ${this._getProfileName()}</div>
+      <div class="breadcrumb"><span @click=${() => this.onNavigate?.("policies")}>Policies</span><span>›</span><strong>${this._p.name || "Untitled"}</strong></div>
+      <section class="hero card">
+        <div class="hero-icon">☾</div>
+        <div class="hero-main">
+          <div class="title-line">
+            <h1>${this._p.name || "Untitled"}</h1>
+            <span class="pill ${this._p.enabled !== false ? "green" : "red-pill"}">${this._p.enabled !== false ? "ENABLED" : "DISABLED"}</span>
           </div>
-          <div class="header-actions">
-            <button class="btn" @click=${() => this._resetDraft()} ?disabled=${!this._dirty}>Cancel</button>
-            <button class="btn primary" @click=${this._saveDraft} ?disabled=${!this._dirty}>Save</button>
-            <button class="icon-btn" aria-label="Delete" @click=${() => (this._showDeleteConfirm = true)}>
-              <span class="trash">⌫</span>
-            </button>
+          <div class="hero-meta">
+            <span>Priority: ${this._p.priority}</span>
+            <span>Profile: ${this._getProfileName()}</span>
+            <span>Rules: ${this._p.rules.length}${this._p.exceptions?.length ? ` + ${this._p.exceptions.length} exceptions` : ""}</span>
+            <span>Applies to: ${this._getAppliesTo()}</span>
           </div>
         </div>
-      </div>
+        <div class="hero-actions">
+          <button class="btn" @click=${() => this._resetDraft()} ?disabled=${!this._dirty}>Cancel</button>
+          <button class="btn primary" @click=${this._saveDraft} ?disabled=${!this._dirty}>Save</button>
+          <button class="btn btn-hero-delete" @click=${() => (this._showDeleteConfirm = true)}>Delete</button>
+        </div>
+      </section>
     `;
   }
 
@@ -496,45 +498,48 @@ export class PolicyView extends LitElement {
   }
 
   static styles = css`
-    :host { display:block; color:var(--primary-text-color); }
+    :host { display:block; color:var(--agpc-text,#eef2ff); }
     * { box-sizing:border-box; }
-    .page { min-height:100%; }
-    .header { padding: 4px 6px 12px; }
-    .breadcrumb { color:var(--secondary-text-color); font-size:13px; margin-bottom:16px; }
-    .breadcrumb span { margin:0 7px; opacity:.55; }
-    .title-row { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
-    .title-line { display:flex; align-items:center; gap:12px; }
-    h1 { font-size:28px; margin:0; font-weight:650; letter-spacing:-.02em; }
-    .subtitle { color:var(--secondary-text-color); margin-top:6px; font-size:13px; }
-    .status { font-size:12px; font-weight:650; border-radius:999px; padding:5px 10px; }
-    .status.on { background:rgba(46,204,113,.14); color:#47da86; }
-    .status.off { background:rgba(255,82,82,.14); color:#ff7676; }
-    .header-actions { display:flex; gap:8px; align-items:center; }
+    .page { padding:0 14px 30px; max-width:1680px; margin:0 auto; }
+    .breadcrumb { height:42px; display:flex; align-items:center; gap:9px; color:#71809f; font-size:13px; }
+    .breadcrumb span:first-child { cursor:pointer; }
+    .breadcrumb strong { color:#eef2ff; }
+    .hero { min-height:112px; padding:17px 18px; display:flex; align-items:center; gap:16px; }
+    .hero-icon { width:68px; height:68px; border-radius:14px; background:#121d35; border:1px solid #2c3a59; color:#c5a6ff; display:grid; place-items:center; font-size:30px; flex:none; }
+    .hero-main { min-width:250px; flex:1; }
+    .title-line { display:flex; align-items:center; gap:10px; }
+    .title-line h1 { margin:0; font-size:21px; }
+    .hero-meta { display:flex; flex-wrap:wrap; gap:20px; color:#9aa6c0; font-size:12px; margin-top:12px; }
+    .hero-actions { display:flex; align-self:flex-start; gap:6px; margin-left:auto; }
     .btn, .icon-btn, .wide-btn, .mode-btn, .day, .tab, .text-btn { font:inherit; }
-    .btn { padding:9px 15px; border:1px solid var(--divider-color,#2a3142); background:#141a2a; color:var(--primary-text-color); border-radius:8px; cursor:pointer; }
-    .btn.primary { background:#1677ff; border-color:#1677ff; color:#fff; }
+    .btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; border:1px solid #2e3853; background:#151e34; color:#d8dff0; border-radius:7px; padding:8px 11px; font:600 11px inherit; cursor:pointer; }
+    .btn:hover { background:#1b2741; }
+    .btn.primary { background:var(--agpc-blue,#4e8cff); border-color:var(--agpc-blue,#4e8cff); color:#fff; }
     .btn:disabled { opacity:.45; cursor:default; }
-    .btn.danger { background:#c93c3c; border-color:#c93c3c; color:#fff; }
-    .icon-btn { width:38px; height:38px; border:0; background:transparent; color:var(--secondary-text-color); cursor:pointer; border-radius:8px; }
+    .btn-hero-delete { background:#451d24; color:#ff6875; border:1px solid #6b2832; border-radius:7px; padding:8px 11px; font:600 11px inherit; cursor:pointer; }
+    .btn-hero-delete:hover { background:#5c2430; }
+    .icon-btn { width:38px; height:38px; border:0; background:transparent; color:var(--agpc-text-dim,#71809f); cursor:pointer; border-radius:8px; }
     .icon-btn:hover { background:rgba(255,255,255,.06); color:#fff; }
-    .trash { font-size:20px; }
-    .tabs { display:flex; gap:6px; border-bottom:1px solid rgba(255,255,255,.08); padding:0 4px; margin-bottom:18px; overflow:auto; }
-    .tab { background:none; border:0; color:var(--secondary-text-color); padding:11px 14px; cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap; }
-    .tab.active { color:#49a0ff; border-color:#1677ff; }
-    .content { padding:0 6px 24px; }
+    .pill { display:inline-flex; align-items:center; padding:3px 8px; border-radius:6px; font-size:9px; font-weight:800; letter-spacing:.04em; }
+    .pill.green { background:#103c31; color:#34db95; }
+    .red-pill { background:#441d28; color:#ff6875; }
+    .card { background:var(--agpc-card-bg,#151c31); border:1px solid var(--agpc-border,#27304a); border-radius:12px; box-sizing:border-box; }
+    .tabs { display:flex; gap:6px; padding:0 6px; border-bottom:1px solid #27304a; margin:2px 0 10px; overflow-x:auto; }
+    .tab { border:0; background:transparent; color:#75839e; font:600 12px inherit; padding:12px 16px; border-bottom:2px solid transparent; cursor:pointer; }
+    .tab.active { color:#4e8cff; border-bottom-color:#4e8cff; }
+    .content { padding:0 0 24px; }
     .grid { display:grid; grid-template-columns:minmax(0,1.65fr) minmax(320px,.9fr); gap:14px; align-items:start; }
-    .card { background:#131a2b; border:1px solid rgba(255,255,255,.08); border-radius:12px; box-shadow:0 4px 20px rgba(0,0,0,.12); overflow:hidden; }
     .card.full { grid-column:1/-1; }
     .card-title { padding:17px 18px 0; font-weight:650; font-size:16px; }
     .card-body { padding:16px 18px 18px; }
     .row-between { display:flex; align-items:center; justify-content:space-between; gap:12px; }
     .summary-card .card-body { padding-top:8px; }
     .summary > div { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid rgba(255,255,255,.06); font-size:13px; }
-    .summary > div span { color:var(--secondary-text-color); }
+    .summary > div span { color:#7e8aa4; }
     .summary b { font-weight:550; text-align:right; }
     .green { color:#44d589; } .red { color:#ff6969; }
-    label { display:block; font-size:12px; color:var(--secondary-text-color); margin:0 0 6px; }
-    .muted { color:var(--secondary-text-color); font-weight:400; }
+    label { display:block; font-size:12px; color:#7e8aa4; margin:0 0 6px; }
+    .muted { color:#7e8aa4; font-weight:400; }
     .tiny { font-size:11px; }
     .input, .textarea, .select { width:100%; border:1px solid #2b3448; background:#0f1524; color:#f3f6fb; border-radius:8px; padding:10px 11px; outline:none; }
     .input:focus, .textarea:focus, .select:focus { border-color:#2c86ff; box-shadow:0 0 0 1px rgba(44,134,255,.25); }
@@ -553,7 +558,7 @@ export class PolicyView extends LitElement {
     .chip button { border:0; background:none; color:#9eb0cc; cursor:pointer; padding:0; }
     .tag-add { display:flex; gap:8px; margin-top:10px; }
     .tag-add .input { flex:1; }
-    .help { color:var(--secondary-text-color); font-size:13px; line-height:1.45; margin:0 0 14px; }
+    .help { color:#7e8aa4; font-size:13px; line-height:1.45; margin:0 0 14px; }
     .inline-form { display:grid; grid-template-columns:150px minmax(220px,1fr) auto 140px auto auto; gap:8px; align-items:end; padding:13px; background:#101726; border:1px solid #253047; border-radius:9px; margin-bottom:13px; }
     .regex-toggle { display:flex; align-items:end; padding-bottom:4px; }
     .regex-toggle label { margin:0; }
@@ -569,10 +574,10 @@ export class PolicyView extends LitElement {
     .status-dot.blocked { color:#ff6666; }.status-dot.allowed{color:#43d786;}
     .text-btn { background:none; border:0; color:#55a5ff; cursor:pointer; padding:6px 8px; }
     .danger-text { color:#ff6c6c; }
-    .empty-box { border:1px dashed #2b364c; background:#101726; border-radius:9px; padding:24px; color:var(--secondary-text-color); display:flex; flex-direction:column; gap:8px; align-items:flex-start; }
+    .empty-box { border:1px dashed #2b364c; background:#101726; border-radius:9px; padding:24px; color:#7e8aa4; display:flex; flex-direction:column; gap:8px; align-items:flex-start; }
     .hint-card { padding:15px 18px; background:rgba(31,111,235,.06); }
     .hint-title { font-weight:650; }
-    .hint-card p { margin:5px 0 0; color:var(--secondary-text-color); font-size:13px; line-height:1.5; }
+    .hint-card p { margin:5px 0 0; color:#7e8aa4; font-size:13px; line-height:1.5; }
     .schedule-type { display:flex; gap:8px; margin-bottom:18px; }
     .mode-btn { border:1px solid #2b3448; background:#101726; color:#bac6da; border-radius:8px; padding:9px 13px; cursor:pointer; }
     .mode-btn.active { background:#102d52; border-color:#2d88ff; color:#5da9ff; }
@@ -596,9 +601,13 @@ export class PolicyView extends LitElement {
     .arrow { color:#5485bb; text-align:center; }
     .rule-summary { display:flex; flex-direction:column; gap:9px; }.rule-line { display:grid; grid-template-columns:9px auto minmax(0,1fr) auto; align-items:center; gap:8px; font-size:12px; }.dot{width:7px;height:7px;border-radius:50%;display:inline-block}.dot.red{background:#ff5e67}.dot.green{background:#41d486}.exception-preview{border-top:1px solid rgba(255,255,255,.08);margin-top:14px;padding-top:14px;}
     .checklist { display:flex; flex-direction:column; gap:10px; font-size:13px; }
-    .modal-scrim { position:fixed; inset:0; background:rgba(0,0,0,.62); z-index:1000; }
-    .modal { position:fixed; z-index:1001; top:50%; left:50%; transform:translate(-50%,-50%); width:min(420px,calc(100vw - 32px)); background:#121a2b; border:1px solid #2a3448; border-radius:12px; padding:22px; box-shadow:0 20px 60px rgba(0,0,0,.5); }
-    .modal h3 { margin:0 0 8px; }.modal p { color:var(--secondary-text-color); line-height:1.5; font-size:13px; }.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px;}
+    .modal-scrim { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:999; }
+    .modal { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:1000; background:var(--agpc-card-bg,#151c31); border:1px solid var(--agpc-border,#27304a); border-radius:12px; padding:20px; min-width:320px; max-width:420px; box-shadow:0 8px 32px rgba(0,0,0,0.4); }
+    .modal h3 { margin:0 0 8px; }
+    .modal p { color:#7e8aa4; line-height:1.5; font-size:13px; }
+    .modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:18px; }
+    .btn-danger { background:#b94650; color:#fff; border-color:#b94650; }
+    .btn-danger:hover { opacity:0.9; }
     @media (max-width: 1000px) { .grid,.preview-grid{grid-template-columns:1fr}.form-row.three,.assignment-grid{grid-template-columns:1fr}.inline-form{grid-template-columns:1fr 1fr}.preview-flow{grid-template-columns:1fr}.arrow{transform:rotate(90deg)} }
   `;
 }

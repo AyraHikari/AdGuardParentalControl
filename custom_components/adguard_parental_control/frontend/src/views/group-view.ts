@@ -19,6 +19,9 @@ export class GroupView extends LitElement {
 
   @state() private _showDeleteConfirm = false;
   @state() private _showAddClient = false;
+  @state() private _showAddMember = false;
+  @state() private _showAddPolicy = false;
+  @state() private _showDeleteMemberConfirm: string | null = null;
   @state() private _tab = "overview";
 
   private _icon(path: string, size = 18) {
@@ -60,6 +63,9 @@ export class GroupView extends LitElement {
 
       ${this._showDeleteConfirm ? this._renderDeleteModal() : nothing}
       ${this._showAddClient ? this._renderAddClientModal() : nothing}
+      ${this._showAddMember ? this._renderAddMemberModal() : nothing}
+      ${this._showAddPolicy ? this._renderAddPolicyModal() : nothing}
+      ${this._showDeleteMemberConfirm ? this._renderDeleteMemberModal() : nothing}
     `;
   }
 
@@ -251,12 +257,13 @@ export class GroupView extends LitElement {
       <section class="card tab-card">
         <div class="section-head">
           <div><h2>Members (${this._members.length})</h2><p>People assigned to this group.</p></div>
-          <button class="btn primary" @click=${() => this._setTab("members")}>${this._icon(ICONS.plus, 15)} Add Member</button>
+          <button class="btn primary" @click=${() => (this._showAddMember = true)}>${this._icon(ICONS.plus, 15)} Add Member</button>
         </div>
         ${this._members.length ? this._members.map((m) => html`
           <div class="tab-row" @click=${() => this.onNavigate?.("member-detail", m)}>
             <div class="row-icon">${this._icon(ICONS.members, 18)}</div>
             <div class="row-main"><strong>${m.name}</strong><span>${m.client_names.length} clients · ${m.assigned_policy_ids.length} policies</span></div>
+            <button class="icon-btn" @click=${(e: Event) => { e.stopPropagation(); this._showDeleteMemberConfirm = m.name; }}>${this._icon(ICONS.delete, 16)}</button>
             ${this._icon(ICONS.chevronRight, 15)}
           </div>
         `) : html`<div class="empty-state">No members assigned.</div>`}
@@ -287,6 +294,7 @@ export class GroupView extends LitElement {
       <section class="card tab-card">
         <div class="section-head">
           <div><h2>Policies (${this._policies.length})</h2><p>Policies assigned to this group.</p></div>
+          <button class="btn primary" @click=${() => (this._showAddPolicy = true)}>${this._icon(ICONS.plus, 15)} Add Policy</button>
         </div>
         ${this._policies.length ? this._policies.map((policy, index) => html`
           <div class="policy-row" @click=${() => this.onNavigate?.("policy-detail", policy)}>
@@ -379,28 +387,136 @@ export class GroupView extends LitElement {
     if (!name || this.group.client_names.includes(name)) return;
     const updated: Group = { ...this.group, client_names: [...this.group.client_names, name] };
     await this.hass.callWS({ type: "adguard_pc/groups/update", group: updated });
-    this.onStateChanged?.();
+    await this.onStateChanged?.();
   }
 
   private async _removeClient(name: string) {
     const updated: Group = { ...this.group, client_names: this.group.client_names.filter((c) => c !== name) };
+    // Auto-remove members whose clients are all gone from the group
+    for (const member of this._members) {
+      const remainingInGroup = member.client_names.filter((cn) => updated.client_names.includes(cn));
+      if (remainingInGroup.length === 0) {
+        updated.member_names = updated.member_names.filter((mn) => mn !== member.name);
+        try {
+          await this.hass.callWS({ type: "adguard_pc/members/delete", member_id: member.id });
+        } catch { /* best-effort */ }
+      }
+    }
     await this.hass.callWS({ type: "adguard_pc/groups/update", group: updated });
-    this.onStateChanged?.();
+    await this.onStateChanged?.();
   }
 
   private async _deleteGroup() {
     await this.hass.callWS({ type: "adguard_pc/groups/delete", group_id: this.group.id });
     this._showDeleteConfirm = false;
-    this.onStateChanged?.();
+    await this.onStateChanged?.();
     this.onNavigate?.("groups");
+  }
+
+  private _renderAddMemberModal() {
+    const available = this.state.members.filter((m) => !this.group.member_names.includes(m.name));
+    return html`
+      <div class="modal-scrim" @click=${() => (this._showAddMember = false)}></div>
+      <div class="modal wide-modal" @click=${(e: Event) => e.stopPropagation()}>
+        <div class="modal-head"><h3>Add Member to ${this.group.name}</h3></div>
+        <div class="modal-body">
+          ${available.length === 0
+            ? html`<div class="empty-state">No available members.</div>`
+            : available.map((m) => html`
+                <button class="modal-list-item" @click=${() => { this._addMember(m.name); this._showAddMember = false; }}>
+                  <span><strong>${m.name}</strong><small>${m.client_names.length} clients · ${m.assigned_policy_ids.length} policies</small></span>
+                  ${this._icon(ICONS.chevronRight, 15)}
+                </button>
+              `)}
+        </div>
+        <div class="modal-actions"><button class="btn" @click=${() => (this._showAddMember = false)}>Cancel</button></div>
+      </div>
+    `;
+  }
+
+  private async _addMember(name: string) {
+    if (!name || this.group.member_names.includes(name)) return;
+    // Membership is independent from the group's direct client assignments.
+    // Do not copy/delete member clients when changing group membership.
+    const updated: Group = {
+      ...this.group,
+      member_names: [...this.group.member_names, name],
+    };
+    await this.hass.callWS({ type: "adguard_pc/groups/update", group: updated });
+    await this.onStateChanged?.();
+  }
+
+  private _renderAddPolicyModal() {
+    const available = this.state.policies.filter((p) => !this.group.assigned_policy_ids.includes(p.id));
+    return html`
+      <div class="modal-scrim" @click=${() => (this._showAddPolicy = false)}></div>
+      <div class="modal wide-modal" @click=${(e: Event) => e.stopPropagation()}>
+        <div class="modal-head"><h3>Add Policy to ${this.group.name}</h3></div>
+        <div class="modal-body">
+          ${available.length === 0
+            ? html`<div class="empty-state">No available policies.</div>`
+            : available.sort((a, b) => b.priority - a.priority).map((p) => html`
+                <button class="modal-list-item" @click=${async () => {
+                  try {
+                    await this._addPolicy(p.id);
+                    this._showAddPolicy = false;
+                  } catch (err) {
+                    console.error("Failed to assign policy to group", err);
+                  }
+                }}>
+                  <span><strong>${p.name}</strong><small>Priority ${p.priority} · ${p.rules.length} rules</small></span>
+                  ${this._icon(ICONS.chevronRight, 15)}
+                </button>
+              `)}
+        </div>
+        <div class="modal-actions"><button class="btn" @click=${() => (this._showAddPolicy = false)}>Cancel</button></div>
+      </div>
+    `;
+  }
+
+  private async _addPolicy(policyId: string) {
+    if (!policyId || this.group.assigned_policy_ids.includes(policyId)) return;
+    await this.hass.callWS({
+      type: "adguard_pc/groups/assign_policy",
+      group_id: this.group.id,
+      policy_id: policyId,
+    });
+    await this.onStateChanged?.();
+  }
+
+  private async _deleteMember(memberName: string) {
+    if (!this.group.member_names.includes(memberName)) return;
+    // Remove only the relationship between this member and this group.
+    // The Member entity, its clients, policies and exceptions remain intact.
+    const updated: Group = {
+      ...this.group,
+      member_names: this.group.member_names.filter((mn) => mn !== memberName),
+    };
+    await this.hass.callWS({ type: "adguard_pc/groups/update", group: updated });
+    this._showDeleteMemberConfirm = null;
+    await this.onStateChanged?.();
+  }
+
+  private _renderDeleteMemberModal() {
+    return html`
+      <div class="modal-scrim" @click=${() => (this._showDeleteMemberConfirm = null)}></div>
+      <div class="modal" @click=${(e: Event) => e.stopPropagation()}>
+        <div class="modal-head"><h3>Remove member "${this._showDeleteMemberConfirm}"?</h3></div>
+        <div class="modal-body"><p>This only removes the member from this group. The member, their clients, policies, and exceptions will remain unchanged.</p></div>
+        <div class="modal-actions">
+          <button class="btn" @click=${() => (this._showDeleteMemberConfirm = null)}>Cancel</button>
+          <button class="btn danger" @click=${() => this._showDeleteMemberConfirm && this._deleteMember(this._showDeleteMemberConfirm)}>Remove from Group</button>
+        </div>
+      </div>
+    `;
   }
 
   static styles = [
     sharedStyles,
     css`
       :host { display:block; padding: 0 0 34px; color: var(--agpc-text); }
-      .page { max-width: 1480px; margin: 0 auto; }
-      .card { background: var(--agpc-card, #131a2d); border: 1px solid var(--agpc-border, #202b45); border-radius: 14px; box-shadow: 0 8px 24px rgba(0,0,0,.14); }
+      .page { max-width: 1480px; margin: 0 auto; padding: 0 14px 34px; box-sizing: border-box; }
+      .card { background:var(--agpc-card-bg, #151c31); border:1px solid var(--agpc-border, #27304a); border-radius:12px; box-shadow: 0 8px 24px rgba(0,0,0,.14); }
       .hero { padding: 22px 24px 20px; display:flex; justify-content:space-between; gap:24px; margin-bottom: 0; }
       .hero-main { display:flex; gap:18px; min-width:0; }
       .hero-icon { width:88px; height:88px; border-radius:50%; display:grid; place-items:center; background: linear-gradient(145deg,#2fcf67,#1f9c4c); color:#fff; flex:0 0 auto; box-shadow:0 10px 28px rgba(38,193,96,.22); }
@@ -423,12 +539,12 @@ export class GroupView extends LitElement {
       .btn.primary { background:var(--agpc-blue); border-color:var(--agpc-blue); color:#fff; }
       .btn.danger { border-color:rgba(248,113,113,.35); color:#ff8d8d; background:rgba(248,113,113,.04); }
       .btn.small { margin-top:12px; padding:7px 10px; font-size:12px; }
-      .tabs { display:flex; gap:28px; padding:0 26px; border-bottom:1px solid var(--agpc-border); margin-bottom:20px; }
-      .tab { position:relative; border:0; background:none; color:var(--agpc-text-dim); padding:14px 2px 12px; cursor:pointer; font:inherit; font-size:13px; }
+      .tabs { display:flex; gap:28px; padding:0 12px; border-bottom:1px solid var(--agpc-border); margin:2px 0 20px; }
+      .tab { position:relative; border:0; background:none; color:var(--agpc-text-dim); padding:14px 6px 12px; cursor:pointer; font:inherit; font-size:13px; }
       .tab.active { color:var(--agpc-blue); }
       .tab.active::after { content:""; position:absolute; left:0; right:0; bottom:-1px; height:2px; background:var(--agpc-blue); border-radius:2px; }
       .overview-grid { display:grid; grid-template-columns: 1.1fr 1.1fr 1.1fr; gap:16px; }
-      .info-card,.policy-card,.clients-card,.inheritance-card,.quick-card,.activity-card,.tab-card { padding:18px; }
+      .info-card,.policy-card,.clients-card,.inheritance-card,.quick-card,.activity-card,.tab-card { padding:16px; }
       .inheritance-card { grid-column: 1; }
       .quick-card { grid-column: 2; }
       .activity-card { grid-column: 3; }
@@ -483,6 +599,8 @@ export class GroupView extends LitElement {
       .timeline-item small { color:var(--agpc-text-dim); font-size:11px; }
       .full-link { width:100%; margin-top:4px; padding-top:11px; border:0; border-top:1px solid var(--agpc-border); background:none; color:var(--agpc-text); cursor:pointer; font:inherit; font-size:12px; }
       .tab-card { min-height:420px; }
+      .btn-danger { background:#b94650; color:#fff; border-color:#b94650; }
+      .btn-danger:hover { opacity:0.9; }
       .tab-row,.policy-row { display:flex; align-items:center; gap:12px; padding:14px 4px; border-bottom:1px solid var(--agpc-border); cursor:pointer; }
       .tab-row:last-child,.policy-row:last-child { border-bottom:none; }
       .row-icon { width:34px; height:34px; border-radius:9px; display:grid; place-items:center; background:rgba(255,255,255,.05); color:var(--agpc-text-dim); }
@@ -501,7 +619,7 @@ export class GroupView extends LitElement {
       .modal { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:1000; background:var(--agpc-card,#121827); border:1px solid var(--agpc-border,#26324a); border-radius:14px; padding:20px; min-width:340px; max-width:420px; box-shadow:0 18px 64px rgba(0,0,0,.45); }
       .wide-modal { min-width:420px; max-width:520px; }
       .modal-head h3 { margin:0; font-size:16px; }
-      .modal-body { margin-top:14px; }
+      .modal-body { margin-top:14px; max-height:60vh; overflow-y:auto; }
       .modal-body p { margin:0; color:var(--agpc-text-dim); font-size:12px; }
       .modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:18px; }
       .modal-list-item { width:100%; display:flex; justify-content:space-between; align-items:center; padding:12px; margin-bottom:7px; background:rgba(255,255,255,.02); border:1px solid var(--agpc-border); border-radius:10px; color:var(--agpc-text); cursor:pointer; text-align:left; }
@@ -509,7 +627,7 @@ export class GroupView extends LitElement {
       .modal-list-item span { display:grid; gap:4px; }
       .modal-list-item small { color:var(--agpc-text-dim); font-size:11px; }
       @media (max-width: 1180px) { .overview-grid { grid-template-columns: 1fr 1fr; } .activity-card { grid-column: 1 / -1; } }
-      @media (max-width: 780px) { .hero { flex-direction:column; } .overview-grid { grid-template-columns: 1fr; } .inheritance-card,.quick-card,.activity-card { grid-column:auto; } .tabs { gap:16px; overflow:auto; } .stats { gap:14px; } .stat { padding-right:14px; } .wide-modal,.modal { min-width:0; width:min(92vw, 520px); } }
+      @media (max-width: 780px) { .page { padding:0 10px 24px; } .hero { flex-direction:column; } .overview-grid { grid-template-columns: 1fr; } .inheritance-card,.quick-card,.activity-card { grid-column:auto; } .tabs { gap:16px; padding:0 4px; overflow:auto; } .stats { gap:14px; } .stat { padding-right:14px; } .wide-modal,.modal { min-width:0; width:min(92vw, 520px); } }
     `,
   ];
 }
