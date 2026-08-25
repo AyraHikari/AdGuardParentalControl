@@ -1,0 +1,8 @@
+{
+  "name": "AdGuard Parental Control",
+  "render_readme": true,
+  "content_in_root": false,
+  "domain": "adguard_parental_control",
+  "country_languages": {},
+  "categories": ["Internet"]
+}

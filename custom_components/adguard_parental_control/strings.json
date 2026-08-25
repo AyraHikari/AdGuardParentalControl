@@ -1,0 +1,88 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to AdGuard Home",
+        "description": "Set up your AdGuard Home connection",
+        "data": {
+          "adguard_url": "AdGuard Home URL",
+          "username": "Username",
+          "password": "Password",
+          "verify_ssl": "Verify SSL certificate"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to AdGuard Home",
+      "invalid_auth": "Invalid authentication",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "AdGuard Home is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options",
+        "data": {
+          "poll_interval": "Polling interval (seconds)",
+          "calendar_entities": "Calendar entities"
+        }
+      }
+    }
+  },
+  "services": {
+    "apply_policies": {
+      "name": "Apply Policies",
+      "description": "Force re-evaluate and push all policies to AdGuard Home"
+    },
+    "set_override": {
+      "name": "Set Override",
+      "description": "Create a temporary override for a client or member",
+      "fields": {
+        "target": {
+          "name": "Target",
+          "description": "Name of the client or member"
+        },
+        "target_type": {
+          "name": "Target Type",
+          "description": "Whether target is a client or member"
+        },
+        "action": {
+          "name": "Action",
+          "description": "Override action"
+        },
+        "duration_minutes": {
+          "name": "Duration (minutes)",
+          "description": "How long the override lasts"
+        }
+      }
+    },
+    "clear_override": {
+      "name": "Clear Override",
+      "description": "Remove an override by ID",
+      "fields": {
+        "override_id": {
+          "name": "Override ID"
+        }
+      }
+    },
+    "clear_overrides_for": {
+      "name": "Clear Overrides For Target",
+      "description": "Remove all overrides for a specific client or member",
+      "fields": {
+        "target": {
+          "name": "Target"
+        },
+        "target_type": {
+          "name": "Target Type"
+        }
+      }
+    },
+    "sync_clients": {
+      "name": "Sync Clients",
+      "description": "Force refresh of client list from AdGuard Home"
+    }
+  }
+}

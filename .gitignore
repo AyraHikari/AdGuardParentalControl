@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+dist/
+build/
+*.whl
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Node / Frontend
+node_modules/
+package-lock.json
+
+# Frontend build output
+custom_components/adguard_parental_control/frontend/dist/
+
+# Home Assistant
+*.db-journal
+ha.log
+
+# Secrets / credentials
+*.env
+.env.*
+secrets.yaml
+
+# Etc
+TODO.md
+pics
