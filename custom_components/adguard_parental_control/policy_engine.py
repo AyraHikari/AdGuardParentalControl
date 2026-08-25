@@ -94,7 +94,7 @@ class PolicyEngine:
         active: list[Policy] = []
         for pid in policy_ids:
             policy = state.find_policy(pid)
-            if policy is None:
+            if policy is None or not policy.enabled:
                 continue
             if policy.is_active(context, context.calendar_events):
                 active.append(policy)
@@ -139,6 +139,20 @@ class PolicyEngine:
                     rule=rule,
                     source="policy",
                     priority=policy.priority,
+                )
+
+            # Policy exceptions are explicit allow rules applied after normal rules.
+            for rule in policy.exceptions:
+                key = f"{rule.rule_type}:{rule.target}"
+                exception_rule = PolicyRule(
+                    target=rule.target,
+                    action=PolicyAction.ALLOW,
+                    rule_type=rule.rule_type,
+                )
+                rules[key] = ResolvedRule(
+                    rule=exception_rule,
+                    source="policy_exception",
+                    priority=policy.priority + 1000000,
                 )
 
         # Apply in priority order (highest priority wins for same target)

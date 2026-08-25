@@ -38,6 +38,10 @@ export interface Policy {
   profile_id: string | null;
   rules: PolicyRule[];
   priority: number;
+  description?: string;
+  enabled?: boolean;
+  tags?: string[];
+  exceptions?: PolicyRule[];
 }
 
 export interface Group {

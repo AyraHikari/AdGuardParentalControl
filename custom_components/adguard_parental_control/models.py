@@ -102,6 +102,10 @@ class Policy:
     profile_id: str | None = None
     rules: list[PolicyRule] = field(default_factory=list)
     priority: int = 0
+    description: str = ""
+    enabled: bool = True
+    tags: list[str] = field(default_factory=list)
+    exceptions: list[PolicyRule] = field(default_factory=list)
 
     def is_active(self, context: CurrentContext, events: list[str] | None = None) -> bool:
         """Check if this policy is active given the current context."""

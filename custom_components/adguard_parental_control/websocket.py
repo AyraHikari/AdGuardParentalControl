@@ -609,6 +609,11 @@ async def ws_policies_update(
         existing.name = pdd.get("name", existing.name)
         existing.priority = pdd.get("priority", existing.priority)
         existing.profile_id = pdd.get("profile_id", existing.profile_id)
+        existing.description = pdd.get("description", existing.description)
+        existing.enabled = pdd.get("enabled", existing.enabled)
+        existing.tags = pdd.get("tags", existing.tags) or []
+        if "exceptions" in pdd:
+            existing.exceptions = [_rule_from_dict(r) for r in pdd["exceptions"]]
         if "rules" in pdd:
             existing.rules = [_rule_from_dict(r) for r in pdd["rules"]]
         if "time_schedule" in pdd:
@@ -862,6 +867,10 @@ def _policy_dict(p: Policy) -> dict:
         "profile_id": p.profile_id,
         "rules": [_rule_dict(r) for r in p.rules],
         "priority": p.priority,
+        "description": p.description,
+        "enabled": p.enabled,
+        "tags": p.tags,
+        "exceptions": [_rule_dict(r) for r in p.exceptions],
     }
 
 
@@ -890,4 +899,8 @@ def _policy_from_dict(d: dict) -> Policy:
         profile_id=d.get("profile_id"),
         rules=[_rule_from_dict(r) for r in d.get("rules", [])],
         priority=d.get("priority", 0),
+        description=d.get("description", ""),
+        enabled=d.get("enabled", True),
+        tags=d.get("tags", []) or [],
+        exceptions=[_rule_from_dict(r) for r in d.get("exceptions", [])],
     )
