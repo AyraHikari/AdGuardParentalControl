@@ -9,6 +9,7 @@ export class ProfileView extends LitElement {
   @property({ attribute: false }) public profile!: Profile;
   @property({ type: Boolean }) public narrow = false;
   @property({ type: Object }) public onNavigate?: (view: string, detail?: any) => void;
+  @property({ type: Object }) public onStateChanged?: () => void;
 
   @state() private _showAddRule = false;
   @state() private _newRuleTarget = "";
@@ -111,6 +112,7 @@ export class ProfileView extends LitElement {
     const updated: Profile = { ...this.profile, default_action: newAction as "block" | "allow" };
     await this.hass.callWS({ type: "adguard_pc/profiles/update", profile: updated });
     this.profile = updated;
+    this.onStateChanged?.();
   }
 
   private async _addRule() {
@@ -125,6 +127,7 @@ export class ProfileView extends LitElement {
     this.profile = updated;
     this._newRuleTarget = "";
     this._showAddRule = false;
+    this.onStateChanged?.();
   }
 
   private async _removeRule(index: number) {
@@ -132,11 +135,13 @@ export class ProfileView extends LitElement {
     const updated: Profile = { ...this.profile, rules };
     await this.hass.callWS({ type: "adguard_pc/profiles/update", profile: updated });
     this.profile = updated;
+    this.onStateChanged?.();
   }
 
   private async _deleteProfile() {
     await this.hass.callWS({ type: "adguard_pc/profiles/delete", profile_id: this.profile.id });
     this._showDeleteConfirm = false;
+    this.onStateChanged?.();
     this.onNavigate?.("dashboard");
   }
 

@@ -12,6 +12,8 @@ import "./views/group-view";
 import "./views/member-view";
 import "./views/profile-view";
 import "./views/list-view";
+import "./views/schedule-view";
+import "./views/services-view";
 import "./views/placeholder-view";
 
 type ViewType =
@@ -33,11 +35,6 @@ type ViewType =
   | "settings";
 
 const PLACEHOLDER_INFO: Record<string, { title: string; description: string }> = {
-  schedules: {
-    title: "Schedules",
-    description: "Dedicated schedule management is coming soon. For now, schedules can be attached to a policy from its detail page.",
-  },
-  services: { title: "Services", description: "A catalog of blockable services will show up here in a future update." },
   logs: { title: "Logs", description: "Query and activity logs will appear here once log streaming is wired up." },
   settings: { title: "Settings", description: "Integration and sync settings will be available here soon." },
 };
@@ -87,6 +84,10 @@ export class AdguardPanel extends LitElement {
     if (view === "profile-detail" && detail) this._selectedProfile = detail;
     this._loadState();
     this.requestUpdate();
+  };
+
+  private _onStateChanged = async () => {
+    await this._loadState();
   };
 
   private _sync = async () => {
@@ -192,29 +193,31 @@ export class AdguardPanel extends LitElement {
       case "dashboard":
         return html`<dashboard-view .state=${this._state!} .hass=${this.hass} .onNavigate=${this._navigate}></dashboard-view>`;
       case "client-detail":
-        return html`<client-view .state=${this._state!} .hass=${this.hass} .client=${this._selectedClient!} .onNavigate=${this._navigate}></client-view>`;
+        return html`<client-view .state=${this._state!} .hass=${this.hass} .client=${this._selectedClient!} .onNavigate=${this._navigate} .onStateChanged=${this._onStateChanged}></client-view>`;
       case "policy-detail":
-        return html`<policy-view .state=${this._state!} .hass=${this.hass} .policy=${this._selectedPolicy!} .onNavigate=${this._navigate}></policy-view>`;
+        return html`<policy-view .state=${this._state!} .hass=${this.hass} .policy=${this._selectedPolicy!} .onNavigate=${this._navigate} .onStateChanged=${this._onStateChanged}></policy-view>`;
       case "group-detail":
-        return html`<group-view .state=${this._state!} .hass=${this.hass} .group=${this._selectedGroup!} .onNavigate=${this._navigate}></group-view>`;
+        return html`<group-view .state=${this._state!} .hass=${this.hass} .group=${this._selectedGroup!} .onNavigate=${this._navigate} .onStateChanged=${this._onStateChanged}></group-view>`;
       case "member-detail":
-        return html`<member-view .state=${this._state!} .hass=${this.hass} .member=${this._selectedMember!} .onNavigate=${this._navigate}></member-view>`;
+        return html`<member-view .state=${this._state!} .hass=${this.hass} .member=${this._selectedMember!} .onNavigate=${this._navigate} .onStateChanged=${this._onStateChanged}></member-view>`;
       case "profile-detail":
-        return html`<profile-view .state=${this._state!} .hass=${this.hass} .profile=${this._selectedProfile!} .onNavigate=${this._navigate}></profile-view>`;
+        return html`<profile-view .state=${this._state!} .hass=${this.hass} .profile=${this._selectedProfile!} .onNavigate=${this._navigate} .onStateChanged=${this._onStateChanged}></profile-view>`;
       case "override":
-        return html`<override-view .state=${this._state!} .hass=${this.hass} .onNavigate=${this._navigate}></override-view>`;
+        return html`<override-view .state=${this._state!} .hass=${this.hass} .onNavigate=${this._navigate} .onStateChanged=${this._onStateChanged}></override-view>`;
       case "groups":
-        return html`<list-view kind="groups" .state=${this._state!} .hass=${this.hass} .onNavigate=${this._navigate}></list-view>`;
+        return html`<list-view kind="groups" .state=${this._state!} .hass=${this.hass} .onNavigate=${this._navigate} .onStateChanged=${this._onStateChanged}></list-view>`;
       case "members":
-        return html`<list-view kind="members" .state=${this._state!} .hass=${this.hass} .onNavigate=${this._navigate}></list-view>`;
+        return html`<list-view kind="members" .state=${this._state!} .hass=${this.hass} .onNavigate=${this._navigate} .onStateChanged=${this._onStateChanged}></list-view>`;
       case "clients":
-        return html`<list-view kind="clients" .state=${this._state!} .hass=${this.hass} .onNavigate=${this._navigate}></list-view>`;
+        return html`<list-view kind="clients" .state=${this._state!} .hass=${this.hass} .onNavigate=${this._navigate} .onStateChanged=${this._onStateChanged}></list-view>`;
       case "policies":
-        return html`<list-view kind="policies" .state=${this._state!} .hass=${this.hass} .onNavigate=${this._navigate}></list-view>`;
+        return html`<list-view kind="policies" .state=${this._state!} .hass=${this.hass} .onNavigate=${this._navigate} .onStateChanged=${this._onStateChanged}></list-view>`;
       case "profiles":
-        return html`<list-view kind="profiles" .state=${this._state!} .hass=${this.hass} .onNavigate=${this._navigate}></list-view>`;
+        return html`<list-view kind="profiles" .state=${this._state!} .hass=${this.hass} .onNavigate=${this._navigate} .onStateChanged=${this._onStateChanged}></list-view>`;
       case "schedules":
+        return html`<schedule-view .state=${this._state!} .hass=${this.hass} .onNavigate=${this._navigate} .onStateChanged=${this._onStateChanged}></schedule-view>`;
       case "services":
+        return html`<services-view .state=${this._state!} .hass=${this.hass} .onNavigate=${this._navigate} .onStateChanged=${this._onStateChanged}></services-view>`;
       case "logs":
       case "settings": {
         const info = PLACEHOLDER_INFO[this._view];

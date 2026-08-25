@@ -16,6 +16,7 @@ export class ListView extends LitElement {
   @property({ attribute: false }) public state!: GlobalState;
   @property({ type: String }) public kind: ListKind = "clients";
   @property({ type: Object }) public onNavigate?: (view: string, detail?: any) => void;
+  @property({ type: Object }) public onStateChanged?: () => void;
 
   @state() private _showAdd = false;
   @state() private _newName = "";
@@ -106,28 +107,10 @@ export class ListView extends LitElement {
             <div class="head-icon">${this._icon(cfg.icon, 18)}</div>
             <h2>${cfg.title} <span class="count">(${cfg.items.length})</span></h2>
           </div>
-          <button class="btn primary" @click=${() => { this._showAdd = !this._showAdd; }}>
+          <button class="btn primary" @click=${() => { this._showAdd = true; }}>
             ${this._icon(ICONS.plus, 14)} Add ${cfg.title.slice(0, -1)}
           </button>
         </div>
-
-        ${this._showAdd
-          ? html`
-              <div class="add-form">
-                <input class="field" placeholder="${cfg.title.slice(0, -1)} name" .value=${this._newName}
-                  @input=${(e: Event) => { this._newName = (e.target as HTMLInputElement).value; }}
-                  @keydown=${(e: KeyboardEvent) => { if (e.key === "Enter") this._create(); }}
-                />
-                ${cfg.secondaryLabel
-                  ? html`<input class="field" placeholder="${cfg.secondaryLabel}" .value=${this._newSecondary}
-                      @input=${(e: Event) => { this._newSecondary = (e.target as HTMLInputElement).value; }}
-                      @keydown=${(e: KeyboardEvent) => { if (e.key === "Enter") this._create(); }}
-                    />`
-                  : nothing}
-                <button class="btn primary" .disabled=${!this._newName.trim()} @click=${this._create}>Create</button>
-              </div>
-            `
-          : nothing}
 
         ${cfg.items.length === 0
           ? html`<div class="empty-state">No ${cfg.title.toLowerCase()} configured yet.</div>`
@@ -156,6 +139,31 @@ export class ListView extends LitElement {
               </table>
             `}
       </div>
+
+      ${this._showAdd ? html`
+        <div class="modal-scrim" @click=${() => { this._showAdd = false; this._newName = ""; this._newSecondary = ""; }}>
+          <div class="modal" @click=${(e: Event) => e.stopPropagation()}>
+            <div class="modal-title">Add ${cfg.title.slice(0, -1)}</div>
+            <div class="modal-fields">
+              <input class="field" placeholder="${cfg.title.slice(0, -1)} name" .value=${this._newName}
+                @input=${(e: Event) => { this._newName = (e.target as HTMLInputElement).value; }}
+                @keydown=${(e: KeyboardEvent) => { if (e.key === "Enter") this._create(); }}
+                autofocus
+              />
+              ${cfg.secondaryLabel
+                ? html`<input class="field" placeholder="${cfg.secondaryLabel}" .value=${this._newSecondary}
+                    @input=${(e: Event) => { this._newSecondary = (e.target as HTMLInputElement).value; }}
+                    @keydown=${(e: KeyboardEvent) => { if (e.key === "Enter") this._create(); }}
+                  />`
+                : nothing}
+            </div>
+            <div class="modal-actions">
+              <button class="btn" @click=${() => { this._showAdd = false; this._newName = ""; this._newSecondary = ""; }}>Cancel</button>
+              <button class="btn primary" .disabled=${!this._newName.trim()} @click=${this._create}>Create</button>
+            </div>
+          </div>
+        </div>
+      ` : nothing}
     `;
   }
 
@@ -181,19 +189,17 @@ export class ListView extends LitElement {
         msg = { type: "adguard_pc/profiles/create", profile: { name, rules: [], default_action: "block" } };
         break;
     }
-    if (msg) await this.hass.callWS(msg);
+    if (msg) {
+      try {
+        await this.hass.callWS(msg);
+      } catch (err) {
+        console.error("Create failed:", err);
+      }
+    }
     this._newName = "";
     this._newSecondary = "";
     this._showAdd = false;
-    this._reload();
-  }
-
-  private async _reload() {
-    try {
-      this.state = await this.hass.callWS({ type: "adguard_pc/state/get" });
-    } catch (err) {
-      console.error("Failed to reload state:", err);
-    }
+    this.onStateChanged?.();
   }
 
   static styles = [
@@ -206,10 +212,28 @@ export class ListView extends LitElement {
       .head-icon { width: 34px; height: 34px; border-radius: 9px; background: var(--agpc-blue-soft); color: var(--agpc-blue); display: flex; align-items: center; justify-content: center; }
       .card-head h2 { font-size: 16px; font-weight: 700; margin: 0; color: var(--agpc-text); }
       .count { color: var(--agpc-text-faint); font-weight: 500; }
-      .add-form { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
-      .add-form .field { flex: 1; min-width: 160px; }
       .name-cell { font-weight: 600; color: var(--agpc-text); }
       .menu-cell { text-align: right; color: var(--agpc-text-faint); }
+
+      .modal-scrim {
+        position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55);
+        display: flex; align-items: center; justify-content: center; z-index: 50;
+      }
+      .modal {
+        background: var(--agpc-card-bg); border: 1px solid var(--agpc-border);
+        border-radius: var(--agpc-radius-lg); padding: 24px; width: 380px; max-width: 90vw;
+      }
+      .modal-title { font-size: 17px; font-weight: 700; color: var(--agpc-text); margin-bottom: 16px; }
+      .modal-fields { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+      .modal-fields .field {
+        width: 100%; box-sizing: border-box;
+        background: var(--agpc-card-bg-alt); border: 1px solid var(--agpc-border);
+        border-radius: var(--agpc-radius-sm); color: var(--agpc-text);
+        padding: 10px 12px; font-size: 13px; font-family: inherit; outline: none;
+      }
+      .modal-fields .field:focus { border-color: var(--agpc-blue); }
+      .modal-fields .field::placeholder { color: var(--agpc-text-faint); }
+      .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
     `,
   ];
 }

@@ -8,6 +8,7 @@ export class OverrideView extends LitElement {
   @property({ attribute: false }) public state!: GlobalState;
   @property({ type: Boolean }) public narrow = false;
   @property({ type: Object }) public onNavigate?: (view: string, detail?: any) => void;
+  @property({ type: Object }) public onStateChanged?: () => void;
 
   @state() private _selectedTarget = "";
   @state() private _selectedTargetType: "client" | "member" = "client";
@@ -141,7 +142,7 @@ export class OverrideView extends LitElement {
         duration_minutes: parseInt(this._selectedDuration, 10),
       });
       this._selectedTarget = "";
-      // Reload state
+      this.onStateChanged?.();
       this.onNavigate?.("override");
     } catch (err) {
       console.error("Failed to set override:", err);
@@ -154,6 +155,7 @@ export class OverrideView extends LitElement {
         type: "adguard_pc/overrides/clear",
         override_id: overrideId,
       });
+      this.onStateChanged?.();
       this.onNavigate?.("override");
     } catch (err) {
       console.error("Failed to clear override:", err);

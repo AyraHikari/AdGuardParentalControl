@@ -9,6 +9,7 @@ export class MemberView extends LitElement {
   @property({ attribute: false }) public member!: Member;
   @property({ type: Boolean }) public narrow = false;
   @property({ type: Object }) public onNavigate?: (view: string, detail?: any) => void;
+  @property({ type: Object }) public onStateChanged?: () => void;
 
   @state() private _newException = "";
   @state() private _showDeleteConfirm = false;
@@ -66,8 +67,10 @@ export class MemberView extends LitElement {
           )}
           <div class="add-row">
             <ha-select label="Add client" .value=${""}
-              @selected=${(e: any) => {
-                if (e.detail.value) this._addClient(e.detail.value);
+              @change=${(e: any) => {
+                const val = (e.target as HTMLSelectElement).value;
+                if (val) this._addClient(val);
+                (e.target as HTMLSelectElement).value = "";
               }}
             >
               ${this.state.clients
@@ -104,8 +107,10 @@ export class MemberView extends LitElement {
           )}
           <div class="add-row">
             <ha-select label="Assign policy" .value=${""}
-              @selected=${(e: any) => {
-                if (e.detail.value) this._addPolicy(e.detail.value);
+              @change=${(e: any) => {
+                const val = (e.target as HTMLSelectElement).value;
+                if (val) this._addPolicy(val);
+                (e.target as HTMLSelectElement).value = "";
               }}
             >
               ${this.state.policies
@@ -155,12 +160,14 @@ export class MemberView extends LitElement {
     const updated: Member = { ...this.member, client_names: [...this.member.client_names, name] };
     await this.hass.callWS({ type: "adguard_pc/members/update", member: updated });
     this.member = updated;
+    this.onStateChanged?.();
   }
 
   private async _removeClient(name: string) {
     const updated: Member = { ...this.member, client_names: this.member.client_names.filter((c) => c !== name) };
     await this.hass.callWS({ type: "adguard_pc/members/update", member: updated });
     this.member = updated;
+    this.onStateChanged?.();
   }
 
   private async _addPolicy(id: string) {
@@ -168,12 +175,14 @@ export class MemberView extends LitElement {
     const updated: Member = { ...this.member, assigned_policy_ids: [...this.member.assigned_policy_ids, id] };
     await this.hass.callWS({ type: "adguard_pc/members/update", member: updated });
     this.member = updated;
+    this.onStateChanged?.();
   }
 
   private async _removePolicy(id: string) {
     const updated: Member = { ...this.member, assigned_policy_ids: this.member.assigned_policy_ids.filter((p) => p !== id) };
     await this.hass.callWS({ type: "adguard_pc/members/update", member: updated });
     this.member = updated;
+    this.onStateChanged?.();
   }
 
   private async _addException() {
@@ -182,17 +191,20 @@ export class MemberView extends LitElement {
     await this.hass.callWS({ type: "adguard_pc/members/update", member: updated });
     this.member = updated;
     this._newException = "";
+    this.onStateChanged?.();
   }
 
   private async _removeException(ex: string) {
     const updated: Member = { ...this.member, exceptions: this.member.exceptions.filter((e) => e !== ex) };
     await this.hass.callWS({ type: "adguard_pc/members/update", member: updated });
     this.member = updated;
+    this.onStateChanged?.();
   }
 
   private async _deleteMember() {
     await this.hass.callWS({ type: "adguard_pc/members/delete", member_id: this.member.id });
     this._showDeleteConfirm = false;
+    this.onStateChanged?.();
     this.onNavigate?.("dashboard");
   }
 

@@ -83,6 +83,13 @@ export interface Override {
   created_at: string;
 }
 
+export interface ServiceInfo {
+  id: string;
+  name: string;
+  icon: string;
+  blocked: boolean;
+}
+
 export interface Status {
   rules_count: number;
   overrides_count: number;
@@ -215,5 +222,18 @@ export class AdguardWebsocketApi {
 
   async clearOverride(overrideId: string): Promise<void> {
     await this.hass.callWS({ type: "adguard_pc/overrides/clear", override_id: overrideId });
+  }
+
+  // Services
+  async listServices(): Promise<ServiceInfo[]> {
+    return this.hass.callWS({ type: "adguard_pc/services/list" });
+  }
+
+  async getBlockedServices(): Promise<string[]> {
+    return this.hass.callWS({ type: "adguard_pc/services/blocked" });
+  }
+
+  async updateBlockedServices(blockedIds: string[]): Promise<void> {
+    await this.hass.callWS({ type: "adguard_pc/services/update", blocked_ids: blockedIds });
   }
 }

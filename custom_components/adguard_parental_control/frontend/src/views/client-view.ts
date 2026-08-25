@@ -39,6 +39,7 @@ export class ClientView extends LitElement {
   @property({ attribute: false }) public state!: GlobalState;
   @property({ attribute: false }) public client!: Client;
   @property({ type: Object }) public onNavigate?: (view: string, detail?: any) => void;
+  @property({ type: Object }) public onStateChanged?: () => void;
 
   @state() private _tab: Tab = "general";
   @state() private _ruleFilter: RuleFilter = "all";
@@ -491,6 +492,7 @@ export class ClientView extends LitElement {
   private async _deleteClient() {
     await this.hass.callWS({ type: "adguard_pc/clients/delete", client_id: this.client.name });
     this._showDeleteConfirm = false;
+    this.onStateChanged?.();
     this.onNavigate?.("clients");
   }
 
@@ -499,6 +501,7 @@ export class ClientView extends LitElement {
       this.state = await this.hass.callWS({ type: "adguard_pc/state/get" });
       const refreshed = this.state.clients.find((c) => c.name === this.client.name);
       if (refreshed) this.client = refreshed;
+      this.onStateChanged?.();
     } catch (err) {
       console.error("Failed to reload state:", err);
     }

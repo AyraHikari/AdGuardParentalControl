@@ -9,6 +9,7 @@ export class GroupView extends LitElement {
   @property({ attribute: false }) public group!: Group;
   @property({ type: Boolean }) public narrow = false;
   @property({ type: Object }) public onNavigate?: (view: string, detail?: any) => void;
+  @property({ type: Object }) public onStateChanged?: () => void;
 
   @state() private _showDeleteConfirm = false;
 
@@ -59,8 +60,10 @@ export class GroupView extends LitElement {
           )}
           <div class="add-row">
             <ha-select label="Add member" .value=${""}
-                @selected=${(e: any) => {
-                  if (e.detail.value) this._addMember(e.detail.value);
+                @change=${(e: any) => {
+                  const val = (e.target as HTMLSelectElement).value;
+                  if (val) this._addMember(val);
+                  (e.target as HTMLSelectElement).value = "";
                 }}
               >
                 ${this.state.members
@@ -91,10 +94,10 @@ export class GroupView extends LitElement {
           )}
           <div class="add-row">
             <ha-select label="Add client" .value=${""}
-              @selected=${(e: any) => {
-                if (e.detail.value) {
-                  this._addClient(e.detail.value);
-                }
+              @change=${(e: any) => {
+                const val = (e.target as HTMLSelectElement).value;
+                if (val) this._addClient(val);
+                (e.target as HTMLSelectElement).value = "";
               }}
             >
               ${this.state.clients
@@ -131,10 +134,10 @@ export class GroupView extends LitElement {
           )}
           <div class="add-row">
             <ha-select label="Assign policy" .value=${""}
-              @selected=${(e: any) => {
-                if (e.detail.value) {
-                  this._addPolicy(e.detail.value);
-                }
+              @change=${(e: any) => {
+                const val = (e.target as HTMLSelectElement).value;
+                if (val) this._addPolicy(val);
+                (e.target as HTMLSelectElement).value = "";
               }}
             >
               ${this.state.policies
@@ -154,12 +157,14 @@ export class GroupView extends LitElement {
     const updated: Group = { ...this.group, member_names: [...this.group.member_names, name] };
     await this.hass.callWS({ type: "adguard_pc/groups/update", group: updated });
     this.group = updated;
+    this.onStateChanged?.();
   }
 
   private async _removeMember(name: string) {
     const updated: Group = { ...this.group, member_names: this.group.member_names.filter((m) => m !== name) };
     await this.hass.callWS({ type: "adguard_pc/groups/update", group: updated });
     this.group = updated;
+    this.onStateChanged?.();
   }
 
   private async _addClient(name: string) {
@@ -167,12 +172,14 @@ export class GroupView extends LitElement {
     const updated: Group = { ...this.group, client_names: [...this.group.client_names, name] };
     await this.hass.callWS({ type: "adguard_pc/groups/update", group: updated });
     this.group = updated;
+    this.onStateChanged?.();
   }
 
   private async _removeClient(name: string) {
     const updated: Group = { ...this.group, client_names: this.group.client_names.filter((c) => c !== name) };
     await this.hass.callWS({ type: "adguard_pc/groups/update", group: updated });
     this.group = updated;
+    this.onStateChanged?.();
   }
 
   private async _addPolicy(id: string) {
@@ -180,17 +187,20 @@ export class GroupView extends LitElement {
     const updated: Group = { ...this.group, assigned_policy_ids: [...this.group.assigned_policy_ids, id] };
     await this.hass.callWS({ type: "adguard_pc/groups/update", group: updated });
     this.group = updated;
+    this.onStateChanged?.();
   }
 
   private async _removePolicy(id: string) {
     const updated: Group = { ...this.group, assigned_policy_ids: this.group.assigned_policy_ids.filter((p) => p !== id) };
     await this.hass.callWS({ type: "adguard_pc/groups/update", group: updated });
     this.group = updated;
+    this.onStateChanged?.();
   }
 
   private async _deleteGroup() {
     await this.hass.callWS({ type: "adguard_pc/groups/delete", group_id: this.group.id });
     this._showDeleteConfirm = false;
+    this.onStateChanged?.();
     this.onNavigate?.("dashboard");
   }
 

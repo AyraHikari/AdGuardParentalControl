@@ -498,6 +498,49 @@ async def ws_policies_delete(
     connection.send_result(msg["id"], None)
 
 
+# ── Services (AdGuard blocked services) ────────────────────
+
+@websocket_api.websocket_command({"type": "adguard_pc/services/list"})
+@websocket_api.async_response
+@_safe
+async def ws_services_list(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict
+) -> None:
+    coordinator = _get_coordinator(hass)
+    all_services = await coordinator.api.get_all_blocked_services()
+    blocked_ids = await coordinator.api.get_blocked_services()
+    result = []
+    for svc in all_services:
+        result.append({
+            "id": svc.get("id", ""),
+            "name": svc.get("name", ""),
+            "icon": svc.get("icon_class", ""),
+            "blocked": svc.get("id", "") in blocked_ids,
+        })
+    connection.send_result(msg["id"], result)
+
+@websocket_api.websocket_command({"type": "adguard_pc/services/blocked"})
+@websocket_api.async_response
+@_safe
+async def ws_services_blocked(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict
+) -> None:
+    coordinator = _get_coordinator(hass)
+    blocked = await coordinator.api.get_blocked_services()
+    connection.send_result(msg["id"], blocked)
+
+@websocket_api.websocket_command(
+    {"type": "adguard_pc/services/update", "blocked_ids": list}
+)
+@websocket_api.async_response
+@_safe
+async def ws_services_update(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict
+) -> None:
+    coordinator = _get_coordinator(hass)
+    await coordinator.api.set_blocked_services(msg["blocked_ids"])
+    connection.send_result(msg["id"], None)
+
 # ── Overrides ─────────────────────────────────────────────
 
 
@@ -574,6 +617,9 @@ _ALL_HANDLERS = [
     ws_policies_create,
     ws_policies_update,
     ws_policies_delete,
+    ws_services_list,
+    ws_services_blocked,
+    ws_services_update,
     ws_overrides_set,
     ws_overrides_clear,
 ]

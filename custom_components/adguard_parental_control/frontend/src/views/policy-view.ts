@@ -9,6 +9,7 @@ export class PolicyView extends LitElement {
   @property({ attribute: false }) public policy!: Policy;
   @property({ type: Boolean }) public narrow = false;
   @property({ type: Object }) public onNavigate?: (view: string, detail?: any) => void;
+  @property({ type: Object }) public onStateChanged?: () => void;
 
   @state() private _showAddRule = false;
   @state() private _newRuleTarget = "";
@@ -240,6 +241,7 @@ export class PolicyView extends LitElement {
     this.policy = updated;
     this._newRuleTarget = "";
     this._showAddRule = false;
+    this.onStateChanged?.();
   }
 
   private async _removeRule(index: number) {
@@ -247,6 +249,7 @@ export class PolicyView extends LitElement {
     const updated: Policy = { ...this.policy, rules };
     await this.hass.callWS({ type: "adguard_pc/policies/update", policy: updated });
     this.policy = updated;
+    this.onStateChanged?.();
   }
 
   private async _saveSchedule() {
@@ -257,12 +260,14 @@ export class PolicyView extends LitElement {
     await this.hass.callWS({ type: "adguard_pc/policies/update", policy: updated });
     this.policy = updated;
     this._showAddSchedule = false;
+    this.onStateChanged?.();
   }
 
   private async _removeSchedule() {
     const updated: Policy = { ...this.policy, time_schedule: null };
     await this.hass.callWS({ type: "adguard_pc/policies/update", policy: updated });
     this.policy = updated;
+    this.onStateChanged?.();
   }
 
   private async _saveCalendar() {
@@ -277,17 +282,20 @@ export class PolicyView extends LitElement {
     await this.hass.callWS({ type: "adguard_pc/policies/update", policy: updated });
     this.policy = updated;
     this._showAddCalendar = false;
+    this.onStateChanged?.();
   }
 
   private async _removeCalendar() {
     const updated: Policy = { ...this.policy, calendar_condition: null };
     await this.hass.callWS({ type: "adguard_pc/policies/update", policy: updated });
     this.policy = updated;
+    this.onStateChanged?.();
   }
 
   private async _deletePolicy() {
     await this.hass.callWS({ type: "adguard_pc/policies/delete", policy_id: this.policy.id });
     this._showDeleteConfirm = false;
+    this.onStateChanged?.();
     this.onNavigate?.("dashboard");
   }
 
@@ -295,6 +303,7 @@ export class PolicyView extends LitElement {
     const updated: Policy = { ...this.policy, profile_id: profileId || null };
     await this.hass.callWS({ type: "adguard_pc/policies/update", policy: updated });
     this.policy = updated;
+    this.onStateChanged?.();
   }
 
   private _handleDeleteDialog() { this._showDeleteConfirm = false; }
