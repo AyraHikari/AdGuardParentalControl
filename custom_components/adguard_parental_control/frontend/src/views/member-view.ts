@@ -21,6 +21,7 @@ export class MemberView extends LitElement {
 
   @state() private _newException = "";
   @state() private _showDeleteConfirm = false;
+  @state() private _showAddClient = false;
   @state() private _queryLogs: QueryLogEntry[] = [];
   @state() private _queryLoading = false;
   @state() private _queryLive = true;
@@ -131,9 +132,7 @@ export class MemberView extends LitElement {
               </table>
               ${!clients.length ? html`<div class="empty">No clients assigned. Add a client below.</div>` : ""}
               <div class="add-row">
-                <ha-select label="Add client" .value=${""} @change=${this._handleAddClient}>
-                  ${this.state.clients.filter((c) => !this.member.client_names.includes(c.name)).map((c) => html`<ha-list-item value="${c.name}">${c.name}</ha-list-item>`)}
-                </ha-select>
+                <button class="btn" @click=${() => { this._showAddClient = true; }}>+ Add Client</button>
               </div>
             </section>
 
@@ -218,6 +217,29 @@ export class MemberView extends LitElement {
           <div class="modal-actions">
             <button class="btn" @click=${() => this._showDeleteConfirm = false}>Cancel</button>
             <button class="btn btn-danger" @click=${this._deleteMember}>Delete</button>
+          </div>
+        </div>
+      ` : ""}
+
+      ${this._showAddClient ? html`
+        <div class="modal-scrim" @click=${() => this._showAddClient = false}></div>
+        <div class="modal">
+          <div class="modal-head"><h3>Add Client to "${this.member.name}"</h3></div>
+          <div class="modal-body">
+            ${this.state.clients.filter((c) => !this.member.client_names.includes(c.name)).length === 0
+              ? html`<p class="empty">No available clients</p>`
+              : this.state.clients
+                  .filter((c) => !this.member.client_names.includes(c.name))
+                  .map((c) => html`
+                    <div class="modal-list-item" @click=${() => { this._addClient(c.name); this._showAddClient = false; }}>
+                      <span>${c.name}</span>
+                      <ha-icon .path=${"M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"}></ha-icon>
+                    </div>
+                  `)
+            }
+          </div>
+          <div class="modal-actions">
+            <button class="btn" @click=${() => this._showAddClient = false}>Cancel</button>
           </div>
         </div>
       ` : ""}
@@ -316,6 +338,11 @@ export class MemberView extends LitElement {
     .modal-head h3 { margin:0 0 12px; font-size:16px; color:var(--agpc-text,#eef2ff); }
     .modal-body p { margin:0 0 16px; color:var(--agpc-text-faint,#7e8aa4); font-size:13px; }
     .modal-actions { display:flex; gap:8px; justify-content:flex-end; }
+    .modal-list-item { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border-bottom:1px solid var(--agpc-border,#27304a); cursor:pointer; border-radius:6px; }
+    .modal-list-item:hover { background:var(--agpc-sidebar-hover,#1b253e); }
+    .modal-list-item:last-child { border-bottom:none; }
+    .btn-danger { background:#b94650; color:#fff; border-color:#b94650; }
+    .btn-danger:hover { opacity:0.9; }
     .timeline-card { margin-top:12px; padding:16px; }.legend { display:flex; gap:10px; align-items:center; color:#78859e; font-size:10px; }.legend i { width:8px; height:8px; border-radius:2px; display:inline-block; }.allowed-dot { background:#25c987; }.blocked-dot { background:#cf4b55; }.unknown-dot { background:#59637a; }.timeline-row { display:grid; grid-template-columns:150px 1fr; gap:14px; align-items:center; margin:16px 0; }.timeline-label strong { display:block; font-size:11px; }.timeline-label small { color:#65728e; font-size:9px; }.timeline { position:relative; padding-top:18px; }.bar { height:10px; border-radius:5px; background:#283047; overflow:hidden; position:relative; }.seg.allowed { position:absolute; left:0; width:58%; height:100%; background:#20b77c; }.seg.blocked { position:absolute; left:58%; width:31%; height:100%; background:#b94650; }.now { position:absolute; left:73%; top:-5px; width:2px; height:20px; background:#f3c73f; }.tick { position:absolute; top:0; color:#56627b; font-size:8px; transform:translateX(-50%); }.t0{left:0}.t4{left:16.67%}.t8{left:33.33%}.t12{left:50%}.t16{left:66.67%}.t20{left:83.33%}.t24{right:0;transform:none}
     .pill { display:inline-flex; align-items:center; padding:3px 8px; border-radius:6px; font-size:9px; font-weight:800; letter-spacing:.04em; }.pill.green { background:#103c31; color:#34db95; }.pill.red { background:#441d28; color:#ff6875; }.pill.yellow-pill { background:#45381b; color:#f0bd35; }.pill.purple { background:#32294e; color:#bd9bff; }.btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; border:1px solid #2e3853; background:#151e34; color:#d8dff0; border-radius:7px; padding:8px 11px; font:600 11px inherit; cursor:pointer; }.btn:hover { background:#1b2741; }.btn.small { padding:6px 9px; font-size:10px; }.icon-btn { width:31px; height:31px; display:grid; place-items:center; border:1px solid transparent; border-radius:7px; background:transparent; color:#8390aa; cursor:pointer; }.icon-btn:hover { background:#1b253e; color:#eaf0ff; border-color:#2d3853; }
     @media (max-width:1250px) { .layout { grid-template-columns:1fr; }.query-panel { position:relative; top:auto; }.query-table-wrap { max-height:460px; } }

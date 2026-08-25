@@ -12,6 +12,7 @@ export class GroupView extends LitElement {
   @property({ type: Object }) public onStateChanged?: () => void;
 
   @state() private _showDeleteConfirm = false;
+  @state() private _showAddClient = false;
 
   render() {
     if (!this.group) return html``;
@@ -40,6 +41,29 @@ export class GroupView extends LitElement {
           <div class="modal-actions">
             <button class="btn" @click=${() => this._showDeleteConfirm = false}>Cancel</button>
             <button class="btn btn-danger" @click=${this._deleteGroup}>Delete</button>
+          </div>
+        </div>
+      ` : ""}
+
+      ${this._showAddClient ? html`
+        <div class="modal-scrim" @click=${() => this._showAddClient = false}></div>
+        <div class="modal">
+          <div class="modal-head"><h3>Add Client to group</h3></div>
+          <div class="modal-body">
+            ${this.state.clients.filter((c) => !this.group.client_names.includes(c.name)).length === 0
+              ? html`<p class="empty">No available clients</p>`
+              : this.state.clients
+                  .filter((c) => !this.group.client_names.includes(c.name))
+                  .map((c) => html`
+                    <div class="modal-list-item" @click=${() => { this._addClient(c.name); this._showAddClient = false; }}>
+                      <span>${c.name}</span>
+                      <ha-icon .path=${"M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"}></ha-icon>
+                    </div>
+                  `)
+            }
+          </div>
+          <div class="modal-actions">
+            <button class="btn" @click=${() => this._showAddClient = false}>Cancel</button>
           </div>
         </div>
       ` : ""}
@@ -97,17 +121,7 @@ export class GroupView extends LitElement {
             `
           )}
           <div class="add-row">
-            <ha-select label="Add client" .value=${""}
-              @change=${(e: any) => {
-                const val = (e.target as HTMLSelectElement).value;
-                if (val) this._addClient(val);
-                (e.target as HTMLSelectElement).value = "";
-              }}
-            >
-              ${this.state.clients
-                .filter((c) => !this.group.client_names.includes(c.name))
-                .map((c) => html`<ha-list-item value="${c.name}">${c.name}</ha-list-item>`)}
-            </ha-select>
+            <button class="btn" @click=${() => { this._showAddClient = true; }}>+ Add Client</button>
           </div>
         </div>
       </ha-card>
@@ -231,6 +245,9 @@ export class GroupView extends LitElement {
     .btn:hover { background:var(--secondary-background-color,#333); }
     .btn-danger { background:var(--error-color,#f44336); color:#fff; border-color:var(--error-color,#f44336); }
     .btn-danger:hover { opacity:0.9; }
+    .modal-list-item { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border-bottom:1px solid var(--divider-color,#333); cursor:pointer; border-radius:6px; }
+    .modal-list-item:hover { background:var(--secondary-background-color,#333); }
+    .modal-list-item:last-child { border-bottom:none; }
   `;
 }
 

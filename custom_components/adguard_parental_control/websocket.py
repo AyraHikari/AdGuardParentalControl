@@ -22,6 +22,7 @@ from .models import (
     PolicyRule,
     Profile,
     TimeSchedule,
+    _gen_id,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -143,7 +144,7 @@ async def ws_profiles_create(
     coordinator = _get_coordinator(hass)
     pd = msg["profile"]
     profile = Profile(
-        id=pd.get("id", ""),
+        id=pd.get("id") or _gen_id(),
         name=pd.get("name", ""),
         rules=[_rule_from_dict(r) for r in pd.get("rules", [])],
     )
@@ -214,7 +215,7 @@ async def ws_groups_create(
     coordinator = _get_coordinator(hass)
     gd = msg["group"]
     group = Group(
-        id=gd.get("id", ""),
+        id=gd.get("id") or _gen_id(),
         name=gd.get("name", ""),
         member_names=gd.get("member_names", []),
         client_names=gd.get("client_names", []),
@@ -288,7 +289,7 @@ async def ws_members_create(
     coordinator = _get_coordinator(hass)
     md = msg["member"]
     member = Member(
-        id=md.get("id", ""),
+        id=md.get("id") or _gen_id(),
         name=md.get("name", ""),
         client_names=md.get("client_names", []),
         assigned_policy_ids=md.get("assigned_policy_ids", []),
@@ -817,7 +818,7 @@ def _policy_from_dict(d: dict) -> Policy:
             invert=ccd.get("invert", False),
         )
     return Policy(
-        id=d.get("id", ""),
+        id=d.get("id") or _gen_id(),
         name=d.get("name", ""),
         time_schedule=ts,
         calendar_condition=cc,
