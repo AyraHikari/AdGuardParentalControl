@@ -222,8 +222,11 @@ class AdGuardSyncEngine:
         await self._api.update_client(adguard_name, data)
 
     async def force_full_sync(self, effective_policies: dict[str, EffectivePolicy]) -> SyncResult:
-        """Force a full sync by clearing the registry first."""
-        self._registry = RuleRegistry()
+        """Force a full sync — re-diff against current AdGuard rules."""
+        # Do NOT clear the registry here; sync() needs old_managed to
+        # detect removals (e.g. disabled policies → 0 rules → push empty).
+        # After sync() completes the registry is already replaced by the
+        # new state, so this is idempotent.
         self._previous_client_services = {}
         self._registered_clients = set()
         return await self.sync(effective_policies)

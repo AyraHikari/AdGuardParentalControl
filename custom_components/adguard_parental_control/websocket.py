@@ -706,9 +706,22 @@ async def ws_policies_delete(
 ) -> None:
     coordinator = _get_coordinator(hass)
     pid = msg["policy_id"]
+    # 1. Remove the policy itself
     coordinator.state.policies = [
         p for p in coordinator.state.policies if p.id != pid
     ]
+    # 2. Cascade: remove from all clients
+    for c in coordinator.state.clients:
+        if pid in c.assigned_policy_ids:
+            c.assigned_policy_ids = [x for x in c.assigned_policy_ids if x != pid]
+    # 3. Cascade: remove from all members
+    for m in coordinator.state.members:
+        if pid in m.assigned_policy_ids:
+            m.assigned_policy_ids = [x for x in m.assigned_policy_ids if x != pid]
+    # 4. Cascade: remove from all groups
+    for g in coordinator.state.groups:
+        if pid in g.assigned_policy_ids:
+            g.assigned_policy_ids = [x for x in g.assigned_policy_ids if x != pid]
     await coordinator.async_save_state()
     await coordinator.async_force_sync()
     connection.send_result(msg["id"], None)
