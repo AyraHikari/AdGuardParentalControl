@@ -89,10 +89,23 @@ class AdGuardParentalControlCoordinator(DataUpdateCoordinator[GlobalState]):
 
     async def async_force_sync(self) -> SyncResult:
         """Force a full re-sync (called by service)."""
+        _LOGGER.info("async_force_sync: starting resolve")
         context = await self.context_resolver.resolve()
         self.override_manager.cleanup_expired()
         effective = self.policy_engine.resolve(self.state, context)
-        return await self.sync_engine.force_full_sync(effective)
+        _LOGGER.info(
+            "async_force_sync: resolved %d client policies",
+            len(effective),
+        )
+        result = await self.sync_engine.force_full_sync(effective)
+        _LOGGER.info(
+            "async_force_sync: done — +%d/-%d rules, %d services, %d errors",
+            result.rules_added,
+            result.rules_removed,
+            result.services_updated,
+            len(result.errors),
+        )
+        return result
 
     async def async_save_state(self) -> None:
         """Persist state to config entry."""

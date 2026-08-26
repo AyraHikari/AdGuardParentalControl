@@ -640,6 +640,12 @@ async def ws_policies_update(
     coordinator = _get_coordinator(hass)
     pdd = msg["policy"]
     pid = pdd.get("id", "")
+    _LOGGER.info(
+        "ws_policies_update: pid=%s  name=%s  keys=%s",
+        pid,
+        pdd.get("name"),
+        list(pdd.keys()),
+    )
     existing = coordinator.state.find_policy(pid)
     if existing:
         existing.name = pdd.get("name", existing.name)
@@ -652,6 +658,12 @@ async def ws_policies_update(
             existing.exceptions = [_rule_from_dict(r) for r in pdd["exceptions"]]
         if "rules" in pdd:
             existing.rules = [_rule_from_dict(r) for r in pdd["rules"]]
+            _LOGGER.info(
+                "ws_policies_update: policy=%s rules=%d %s",
+                existing.name,
+                len(existing.rules),
+                [(r.target, r.action.value, r.rule_type.value) for r in existing.rules],
+            )
         if "time_schedule" in pdd:
             tsd = pdd["time_schedule"]
             if tsd:
@@ -673,7 +685,14 @@ async def ws_policies_update(
             else:
                 existing.calendar_condition = None
     await coordinator.async_save_state()
-    await coordinator.async_force_sync()
+    sync_result = await coordinator.async_force_sync()
+    _LOGGER.info(
+        "ws_policies_update: sync_result rules +%d/-%d services=%d errors=%s",
+        sync_result.rules_added,
+        sync_result.rules_removed,
+        sync_result.services_updated,
+        sync_result.errors,
+    )
     connection.send_result(msg["id"], _policy_dict(existing) if existing else None)
 
 

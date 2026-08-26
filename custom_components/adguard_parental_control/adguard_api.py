@@ -66,6 +66,15 @@ class AdGuardHomeAPI:
                                 return await retry.json()
                             return None
                     resp.raise_for_status()
+                if resp.status >= 400:
+                    body = await resp.text()
+                    _LOGGER.warning(
+                        "AdGuard API %d %s %s body=%s",
+                        resp.status,
+                        method,
+                        path,
+                        body[:500],
+                    )
                 resp.raise_for_status()
                 if resp.content_type == "application/json":
                     return await resp.json()
@@ -162,7 +171,8 @@ class AdGuardHomeAPI:
     # ── Filtering / User Rules ────────────────────────────────
 
     async def get_filtering_status(self) -> dict:
-        return await self._request("GET", "/control/filtering/status")
+        data = await self._request("GET", "/control/filtering/status")
+        return data if isinstance(data, dict) else {}
 
     async def get_user_rules(self) -> list[str]:
         data = await self.get_filtering_status()
@@ -193,7 +203,7 @@ class AdGuardHomeAPI:
 
     async def get_clients(self) -> list[dict]:
         data = await self._request("GET", "/control/clients")
-        clients = data.get("clients", []) if isinstance(data, dict) else []
+        clients = (data.get("clients") or []) if isinstance(data, dict) else []
         return clients
 
     async def add_client(self, client: dict) -> None:

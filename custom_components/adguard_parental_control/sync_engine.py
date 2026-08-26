@@ -80,27 +80,44 @@ class AdGuardSyncEngine:
             new_registry = RuleRegistry()
             for client_name, policy in effective_policies.items():
                 new_registry.set_client_rules(client_name, set(policy.user_rules))
-                _LOGGER.debug(
-                    "Client %s: %d rules, %d services",
+                _LOGGER.info(
+                    "sync: client=%s  rules=%d  services=%s",
                     client_name,
                     len(policy.user_rules),
-                    len(policy.blocked_services),
+                    policy.blocked_services,
                 )
                 for r in policy.user_rules:
-                    _LOGGER.debug("  rule: %s", r)
+                    _LOGGER.info("  rule: %s", r)
 
             old_managed = self._registry.get_all_rules_flat()
             new_managed = new_registry.get_all_rules_flat()
+            _LOGGER.info(
+                "sync: old_managed=%d  new_managed=%d  equal=%s",
+                len(old_managed),
+                len(new_managed),
+                old_managed == new_managed,
+            )
 
             if old_managed != new_managed:
                 existing = set(await self._api.get_user_rules())
                 unmanaged = {rule for rule in existing if "$client=" not in rule}
+                _LOGGER.info(
+                    "sync: existing_rules=%d  (unmanaged=%d, managed_new=%d)",
+                    len(existing),
+                    len(unmanaged),
+                    len(new_managed),
+                )
                 combined = sorted(unmanaged | new_managed)
+                _LOGGER.info(
+                    "sync: pushing %d rules to AdGuard: %s",
+                    len(combined),
+                    combined,
+                )
                 await self._api.set_user_rules(combined)
                 result.rules_added = len(new_managed - old_managed)
                 result.rules_removed = len(old_managed - new_managed)
-                _LOGGER.debug(
-                    "Scoped rule sync: +%d / -%d rules",
+                _LOGGER.info(
+                    "sync: pushed +%d / -%d rules",
                     result.rules_added,
                     result.rules_removed,
                 )
@@ -163,8 +180,8 @@ class AdGuardSyncEngine:
         adguard_clients = await self._api.get_clients()
         adguard_client = None
 
-        for remote in adguard_clients:
-            remote_ids = [str(v).strip() for v in remote.get("ids", []) if str(v).strip()]
+        for remote in (adguard_clients or []):
+            remote_ids = [str(v).strip() for v in (remote.get("ids") or []) if str(v).strip()]
             if remote.get("name") == client_name or any(
                 identity in remote_ids for identity in policy.client_ids
             ):
@@ -191,9 +208,17 @@ class AdGuardSyncEngine:
 
         adguard_name = str(adguard_client.get("name") or client_name)
         data = {
+            "ids": adguard_client.get("ids", []),
             "blocked_services": list(policy.blocked_services),
             "use_global_settings": not bool(policy.blocked_services),
         }
+        _LOGGER.info(
+            "Updating client %s (adguard_name=%s) ids=%s services=%s",
+            client_name,
+            adguard_name,
+            data["ids"],
+            data["blocked_services"],
+        )
         await self._api.update_client(adguard_name, data)
 
     async def force_full_sync(self, effective_policies: dict[str, EffectivePolicy]) -> SyncResult:

@@ -49,10 +49,21 @@ class PolicyEngine:
         context: CurrentContext,
     ) -> dict[str, EffectivePolicy]:
         results: dict[str, EffectivePolicy] = {}
+        _LOGGER.info(
+            "resolve: %d clients in state, %d policies total",
+            len(state.clients),
+            len(state.policies),
+        )
 
         for client in state.clients:
             # 1. Gather all active policies assigned to this client
             active_policies = self._get_active_policies(client.name, state, context)
+            _LOGGER.info(
+                "resolve[%s]: %d active policies (ids=%s)",
+                client.name,
+                len(active_policies),
+                [p.id for p in active_policies],
+            )
 
             # 2. Cascade: profile → policy → member → client
             resolved = self._cascade_policies(active_policies, client.name, state)
@@ -64,7 +75,14 @@ class PolicyEngine:
             resolved = self._apply_overrides(resolved, client.name, state)
 
             # 5. Build final EffectivePolicy
-            results[client.name] = self._build_effective(resolved, client)
+            eff = self._build_effective(resolved, client)
+            results[client.name] = eff
+            _LOGGER.info(
+                "resolve[%s]: → %d rules, %d services",
+                client.name,
+                len(eff.user_rules),
+                len(eff.blocked_services),
+            )
 
         return results
 
@@ -83,22 +101,69 @@ class PolicyEngine:
         client = state.find_client(client_name)
         if client:
             policy_ids.update(client.assigned_policy_ids)
+            _LOGGER.info(
+                "_get_active[%s]: client_ids=%s, assigned_policies=%s",
+                client_name,
+                client.ids,
+                client.assigned_policy_ids,
+            )
+        else:
+            _LOGGER.warning("_get_active[%s]: client NOT FOUND in state", client_name)
 
         # Member policies
         for member in state.get_members_for_client(client_name):
             policy_ids.update(member.assigned_policy_ids)
+            _LOGGER.info(
+                "_get_active[%s]: member=%s adds policies=%s",
+                client_name,
+                member.name,
+                member.assigned_policy_ids,
+            )
 
         # Group policies
         for group in state.get_groups_for_client(client_name):
             policy_ids.update(group.assigned_policy_ids)
+            _LOGGER.info(
+                "_get_active[%s]: group=%s adds policies=%s",
+                client_name,
+                group.name,
+                group.assigned_policy_ids,
+            )
 
+        _LOGGER.info(
+            "_get_active[%s]: candidate_policy_ids=%s  total_policies=%d",
+            client_name,
+            policy_ids,
+            len(state.policies),
+        )
         active: list[Policy] = []
         for pid in policy_ids:
             policy = state.find_policy(pid)
-            if policy is None or not policy.enabled:
+            if policy is None:
+                _LOGGER.warning(
+                    "_get_active[%s]: policy %s NOT FOUND in state (has %d policies)",
+                    client_name,
+                    pid,
+                    len(state.policies),
+                )
+                continue
+            if not policy.enabled:
+                _LOGGER.info(
+                    "_get_active[%s]: policy %s (%s) DISABLED, skipping",
+                    client_name,
+                    pid,
+                    policy.name,
+                )
                 continue
             if policy.is_active(context, context.calendar_events):
                 active.append(policy)
+            else:
+                _LOGGER.info(
+                    "_get_active[%s]: policy %s (%s) NOT active per schedule/calendar",
+                    client_name,
+                    pid,
+                    policy.name,
+                )
 
         # Sort by priority (higher = checked first)
         active.sort(key=lambda p: p.priority, reverse=True)
