@@ -200,10 +200,10 @@ export class ListView extends LitElement {
               <div class="policy-card-main">
                 <div class="policy-card-top">
                   <span class="policy-card-name">${p.name || "Untitled"}</span>
-                  <label class="toggle-line" @click=${(e: Event) => e.stopPropagation()}>
+                  <label class="switch-toggle policy-switch" title=${enabled ? "Disable policy" : "Enable policy"} @click=${(e: Event) => e.stopPropagation()}>
                     <input type="checkbox" ?checked=${enabled}
                       @change=${(e: Event) => this._togglePolicyEnabled(p, (e.target as HTMLInputElement).checked)} />
-                    <span class="toggle-label">${enabled ? "On" : "Off"}</span>
+                    <span class="switch-slider"></span>
                   </label>
                 </div>
                 ${desc ? html`<div class="policy-card-desc">${desc.length > 100 ? desc.slice(0, 100) + "…" : desc}</div>` : ""}

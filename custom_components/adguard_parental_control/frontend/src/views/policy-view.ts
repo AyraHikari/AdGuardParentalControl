@@ -86,7 +86,11 @@ export class PolicyView extends LitElement {
         <div class="hero-main">
           <div class="title-line">
             <h1>${this._p.name || "Untitled"}</h1>
-            <span class="pill ${this._p.enabled !== false ? "green" : "red-pill"}">${this._p.enabled !== false ? "ENABLED" : "DISABLED"}</span>
+            <label class="policy-status-switch ${this._p.enabled !== false ? "enabled" : "disabled"}" title=${this._p.enabled !== false ? "Disable policy" : "Enable policy"} @click=${(e: Event) => e.stopPropagation()}>
+              <input type="checkbox" .checked=${this._p.enabled !== false} @change=${this._onEnabledChange} />
+              <span class="switch-slider"></span>
+              <strong>${this._p.enabled !== false ? "ENABLED" : "DISABLED"}</strong>
+            </label>
           </div>
           <div class="hero-meta">
             <span>Priority: ${this._p.priority}</span>
@@ -151,9 +155,10 @@ export class PolicyView extends LitElement {
               </div>
               <div>
                 <label>Status</label>
-                <label class="toggle-line">
+                <label class="policy-status-switch form-status-switch ${this._p.enabled !== false ? "enabled" : "disabled"}">
                   <input type="checkbox" .checked=${this._p.enabled !== false} @change=${this._onEnabledChange} />
-                  <span>Enabled</span>
+                  <span class="switch-slider"></span>
+                  <strong>${this._p.enabled !== false ? "Enabled" : "Disabled"}</strong>
                 </label>
               </div>
             </div>
@@ -523,6 +528,16 @@ export class PolicyView extends LitElement {
     .pill { display:inline-flex; align-items:center; padding:3px 8px; border-radius:6px; font-size:9px; font-weight:800; letter-spacing:.04em; }
     .pill.green { background:#103c31; color:#34db95; }
     .red-pill { background:#441d28; color:#ff6875; }
+    .policy-status-switch { display:inline-flex; align-items:center; gap:8px; cursor:pointer; user-select:none; }
+    .policy-status-switch input { position:absolute; opacity:0; pointer-events:none; width:0; height:0; }
+    .policy-status-switch .switch-slider { position:relative; display:inline-block; width:38px; height:22px; border-radius:999px; background:#3a4560; border:1px solid #46526d; transition:background .18s,border-color .18s; flex:none; }
+    .policy-status-switch .switch-slider::before { content:""; position:absolute; left:2px; top:2px; width:16px; height:16px; border-radius:50%; background:#aab4c7; transition:transform .18s,background .18s; }
+    .policy-status-switch input:checked + .switch-slider { background:var(--agpc-green,#20c879); border-color:var(--agpc-green,#20c879); }
+    .policy-status-switch input:checked + .switch-slider::before { transform:translateX(16px); background:#fff; }
+    .policy-status-switch strong { font-size:10px; letter-spacing:.04em; }
+    .policy-status-switch.enabled strong { color:#44d589; }
+    .policy-status-switch.disabled strong { color:#ff6875; }
+    .form-status-switch { margin-top:5px; }
     .card { background:var(--agpc-card-bg,#151c31); border:1px solid var(--agpc-border,#27304a); border-radius:12px; box-sizing:border-box; }
     .tabs { display:flex; gap:6px; padding:0 6px; border-bottom:1px solid #27304a; margin:2px 0 10px; overflow-x:auto; }
     .tab { border:0; background:transparent; color:#75839e; font:600 12px inherit; padding:12px 16px; border-bottom:2px solid transparent; cursor:pointer; }
