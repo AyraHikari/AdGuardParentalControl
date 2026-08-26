@@ -306,6 +306,13 @@ class PolicyEngine:
 
             base = rule.to_adguard_rule()
             if not base:
+                _LOGGER.warning(
+                    "Skipping rule target=%r is_regex=%s action=%s "
+                    "(invalid regex or empty result)",
+                    rule.target,
+                    rule.is_regex,
+                    rule.action.value,
+                )
                 continue
 
             for identity in identities:

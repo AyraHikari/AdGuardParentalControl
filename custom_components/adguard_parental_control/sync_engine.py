@@ -60,6 +60,7 @@ class AdGuardSyncEngine:
         self._api = api
         self._registry = RuleRegistry()
         self._previous_client_services: dict[str, list[str]] = {}
+        self._registered_clients: set[str] = set()
 
     @property
     def registry(self) -> RuleRegistry:
@@ -79,6 +80,14 @@ class AdGuardSyncEngine:
             new_registry = RuleRegistry()
             for client_name, policy in effective_policies.items():
                 new_registry.set_client_rules(client_name, set(policy.user_rules))
+                _LOGGER.debug(
+                    "Client %s: %d rules, %d services",
+                    client_name,
+                    len(policy.user_rules),
+                    len(policy.blocked_services),
+                )
+                for r in policy.user_rules:
+                    _LOGGER.debug("  rule: %s", r)
 
             old_managed = self._registry.get_all_rules_flat()
             new_managed = new_registry.get_all_rules_flat()
@@ -101,10 +110,18 @@ class AdGuardSyncEngine:
             # state changed outside this integration.
             for client_name, policy in effective_policies.items():
                 prev = self._previous_client_services.get(client_name)
-                if prev != policy.blocked_services or prev is None:
+                # Also run when rules exist but client may not be registered
+                # in AdGuard Home yet (required for $client= modifier).
+                needs_register = (
+                    prev != policy.blocked_services
+                    or prev is None
+                    or client_name not in self._registered_clients
+                )
+                if needs_register:
                     try:
                         await self._sync_client_blocked_services(client_name, policy)
                         result.services_updated += 1
+                        self._registered_clients.add(client_name)
                     except Exception as err:
                         msg = f"Failed syncing services for {client_name}: {err}"
                         _LOGGER.warning(msg)
@@ -183,4 +200,5 @@ class AdGuardSyncEngine:
         """Force a full sync by clearing the registry first."""
         self._registry = RuleRegistry()
         self._previous_client_services = {}
+        self._registered_clients = set()
         return await self.sync(effective_policies)

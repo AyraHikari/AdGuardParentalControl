@@ -9,6 +9,8 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import uuid4
 
+import re as _re
+
 from .const import OverrideAction, PolicyAction, RuleType
 
 
@@ -117,8 +119,17 @@ class PolicyRule:
     is_regex: bool = False
 
     def to_adguard_rule(self) -> str:
-        """Convert to AdGuard user rule syntax."""
+        """Convert to AdGuard user rule syntax.
+
+        Returns an empty string when the regex is invalid so that the
+        rule is silently skipped instead of being pushed to AdGuard
+        where it would be ignored or cause unexpected behaviour.
+        """
         if self.is_regex:
+            try:
+                _re.compile(self.target)
+            except _re.error:
+                return ""
             if self.action == PolicyAction.ALLOW:
                 return f"@@/{self.target}/"
             return f"/{self.target}/"
