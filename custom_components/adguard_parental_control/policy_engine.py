@@ -22,6 +22,7 @@ class EffectivePolicy:
     """Final resolved policy for a single client."""
 
     client_name: str
+    client_ids: list[str] = field(default_factory=list)
     user_rules: list[str] = field(default_factory=list)
     blocked_services: list[str] = field(default_factory=list)
     dns_rewrites: list[tuple[str, str]] = field(default_factory=list)
@@ -63,7 +64,7 @@ class PolicyEngine:
             resolved = self._apply_overrides(resolved, client.name, state)
 
             # 5. Build final EffectivePolicy
-            results[client.name] = self._build_effective(resolved, client.name)
+            results[client.name] = self._build_effective(resolved, client)
 
         return results
 
@@ -173,24 +174,44 @@ class PolicyEngine:
         client_name: str,
         state: GlobalState,
     ) -> list[ResolvedRule]:
-        """Remove rules that match client/member exceptions."""
-        exceptions: set[str] = set()
+        """Apply member/client exceptions as explicit ALLOW rules.
+
+        Removing a BLOCK rule is not enough because an independent AdGuard
+        blocklist can still match the domain. We therefore emit a higher
+        precedence ALLOW rule for each exception.
+        """
+        exceptions: set[tuple[str, str]] = set()
 
         client = state.find_client(client_name)
         if client:
-            exceptions.update(ex.lower() for ex in client.exceptions)
+            for exception in client.exceptions:
+                exceptions.add(("domain", exception.lower()))
 
         for member in state.get_members_for_client(client_name):
-            exceptions.update(ex.lower() for ex in member.exceptions)
+            for exception in member.exceptions:
+                exceptions.add(("domain", exception.lower()))
 
         if not exceptions:
             return resolved
 
-        return [
-            r
-            for r in resolved
-            if r.rule.target.lower() not in exceptions
+        result = [
+            r for r in resolved
+            if (r.rule.rule_type.value, r.rule.target.lower()) not in exceptions
         ]
+
+        for rule_type, target in exceptions:
+            result.append(
+                ResolvedRule(
+                    rule=PolicyRule(
+                        target=target,
+                        action=PolicyAction.ALLOW,
+                        rule_type=RuleType.DOMAIN,
+                    ),
+                    source="exception",
+                    priority=2_000_000,
+                )
+            )
+        return result
 
     # ── Step 4: Apply overrides ───────────────────────────────
 
@@ -257,23 +278,48 @@ class PolicyEngine:
     def _build_effective(
         self,
         resolved: list[ResolvedRule],
-        client_name: str,
+        client,
     ) -> EffectivePolicy:
-        """Convert resolved rules into an EffectivePolicy for sync."""
+        """Convert resolved rules into an EffectivePolicy for sync.
+
+        Domain/category/regex rules are emitted with an AdGuard $client
+        modifier so a policy assigned through a group/member affects only
+        the intended device instead of becoming a global AdGuard rule.
+
+        Service rules are handled through AdGuard's per-client blocked
+        services API; only BLOCK actions are sent to that API.
+        """
         user_rules: list[str] = []
         blocked_services: list[str] = []
+        identities = [str(v).strip() for v in (client.ids or []) if str(v).strip()]
 
+        # Prefer a concrete IP/MAC identity for the $client modifier. For
+        # multiple identities, emit one rule per identity.
+        identities = identities or [client.name]
         for r in resolved:
-            if r.rule.rule_type == RuleType.SERVICE:
-                blocked_services.append(r.rule.target)
-            else:
-                adguard_rule = r.rule.to_adguard_rule()
-                if adguard_rule:
-                    user_rules.append(adguard_rule)
+            rule = r.rule
+            if rule.rule_type == RuleType.SERVICE:
+                if rule.action == PolicyAction.BLOCK:
+                    blocked_services.append(rule.target)
+                # ALLOW is represented by absence from blocked_services.
+                continue
+
+            base = rule.to_adguard_rule()
+            if not base:
+                continue
+
+            for identity in identities:
+                if "$client=" not in base:
+                    scoped = f"{base}$client={identity}"
+                else:
+                    scoped = base
+                user_rules.append(scoped)
 
         return EffectivePolicy(
-            client_name=client_name,
+            client_name=client.name,
+            client_ids=identities,
             user_rules=sorted(set(user_rules)),
             blocked_services=sorted(set(blocked_services)),
             filtering_enabled=True,
         )
+

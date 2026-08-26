@@ -66,33 +66,42 @@ class AdGuardSyncEngine:
         return self._registry
 
     async def sync(self, effective_policies: dict[str, EffectivePolicy]) -> SyncResult:
-        """Delta-sync effective policies to AdGuard Home."""
+        """Delta-sync effective policies to AdGuard Home.
+
+        Integration-managed DNS rules are identifiable by the $client modifier.
+        Existing global/user rules that do not contain that modifier are kept
+        intact, so syncing parental policies cannot erase the user's own
+        AdGuard Home custom rules.
+        """
         result = SyncResult()
 
         try:
-            # 1. Build new registry from effective policies
             new_registry = RuleRegistry()
             for client_name, policy in effective_policies.items():
                 new_registry.set_client_rules(client_name, set(policy.user_rules))
 
-            # 2. Diff rules
-            rules_to_add, rules_to_remove = new_registry.diff(self._registry)
+            old_managed = self._registry.get_all_rules_flat()
+            new_managed = new_registry.get_all_rules_flat()
 
-            if rules_to_add or rules_to_remove:
+            if old_managed != new_managed:
+                existing = set(await self._api.get_user_rules())
+                unmanaged = {rule for rule in existing if "$client=" not in rule}
+                combined = sorted(unmanaged | new_managed)
+                await self._api.set_user_rules(combined)
+                result.rules_added = len(new_managed - old_managed)
+                result.rules_removed = len(old_managed - new_managed)
                 _LOGGER.debug(
-                    "Rule sync: +%d / -%d rules",
-                    len(rules_to_add),
-                    len(rules_to_remove),
+                    "Scoped rule sync: +%d / -%d rules",
+                    result.rules_added,
+                    result.rules_removed,
                 )
-                all_rules = sorted(new_registry.get_all_rules_flat())
-                await self._api.set_user_rules(all_rules)
-                result.rules_added = len(rules_to_add)
-                result.rules_removed = len(rules_to_remove)
 
-            # 3. Per-client blocked services
+            # Always reconcile service state. This handles a restart where the
+            # previous in-memory service cache is empty, and it also repairs
+            # state changed outside this integration.
             for client_name, policy in effective_policies.items():
                 prev = self._previous_client_services.get(client_name)
-                if prev != policy.blocked_services:
+                if prev != policy.blocked_services or prev is None:
                     try:
                         await self._sync_client_blocked_services(client_name, policy)
                         result.services_updated += 1
@@ -100,7 +109,18 @@ class AdGuardSyncEngine:
                         msg = f"Failed syncing services for {client_name}: {err}"
                         _LOGGER.warning(msg)
                         result.errors.append(msg)
-                self._previous_client_services[client_name] = policy.blocked_services
+                self._previous_client_services[client_name] = list(policy.blocked_services)
+
+            # Remove service settings from clients that no longer exist in the
+            # desired policy set but were previously managed by this engine.
+            removed_clients = set(self._previous_client_services) - set(effective_policies)
+            for client_name in removed_clients:
+                try:
+                    empty_policy = EffectivePolicy(client_name=client_name)
+                    await self._sync_client_blocked_services(client_name, empty_policy)
+                except Exception as err:
+                    _LOGGER.debug("Failed clearing services for removed client %s: %s", client_name, err)
+                self._previous_client_services.pop(client_name, None)
 
             self._registry = new_registry
 
@@ -116,32 +136,48 @@ class AdGuardSyncEngine:
         client_name: str,
         policy: EffectivePolicy,
     ) -> None:
-        """Push blocked services for a specific client.
+        """Apply per-client blocked services in AdGuard Home.
 
-        Resolves client_name against AdGuard registered clients and
-        updates via /control/clients/update.
+        The integration registers the client by its configured identity if it
+        is not already present in AdGuard. When at least one service is blocked,
+        global service settings are disabled for that client. When the policy
+        has no service blocks, global service settings are restored.
         """
         adguard_clients = await self._api.get_clients()
-        adguard_name = None
+        adguard_client = None
 
-        for client in adguard_clients:
-            if client.get("name") == client_name:
-                adguard_name = client.get("name")
-                break
-            # Match by IP or other IDs
-            ids = client.get("ids", [])
-            if client_name in ids:
-                adguard_name = client.get("name")
+        for remote in adguard_clients:
+            remote_ids = [str(v).strip() for v in remote.get("ids", []) if str(v).strip()]
+            if remote.get("name") == client_name or any(
+                identity in remote_ids for identity in policy.client_ids
+            ):
+                adguard_client = remote
                 break
 
-        if adguard_name is None:
-            _LOGGER.debug("Client %s not found in AdGuard, skipping services sync", client_name)
+        if adguard_client is None and policy.client_ids:
+            payload = {
+                "name": client_name,
+                "ids": policy.client_ids,
+                "blocked_services": list(policy.blocked_services),
+                "use_global_settings": not bool(policy.blocked_services),
+            }
+            _LOGGER.info("Registering client %s in AdGuard Home for policy enforcement", client_name)
+            await self._api.add_client(payload)
             return
 
-        await self._api.update_client(
-            adguard_name,
-            {"blocked_services": policy.blocked_services},
-        )
+        if adguard_client is None:
+            _LOGGER.warning(
+                "Client %s has no AdGuard identity; cannot sync blocked services",
+                client_name,
+            )
+            return
+
+        adguard_name = str(adguard_client.get("name") or client_name)
+        data = {
+            "blocked_services": list(policy.blocked_services),
+            "use_global_settings": not bool(policy.blocked_services),
+        }
+        await self._api.update_client(adguard_name, data)
 
     async def force_full_sync(self, effective_policies: dict[str, EffectivePolicy]) -> SyncResult:
         """Force a full sync by clearing the registry first."""

@@ -40,12 +40,44 @@ export class ClientView extends LitElement {
   disconnectedCallback(){ super.disconnectedCallback(); this._stopQueryPolling(); }
   updated(changed:PropertyValues){ if(changed.has("client")){this._selectedPolicyId=this.client?.assigned_policy_ids?.[0]||null;this._queryLogs=[];this._queryOldest="";this._queryFullyLoaded=false;this._loadQueryLog();} }
   private _icon(path:string,size=16){return svg`<svg viewBox="0 0 24 24" width="${size}" height="${size}"><path fill="currentColor" d="${path}"></path></svg>`;}
-  private get _group(){return this.state.groups.find(g=>g.client_names.includes(this.client.name))||null;}
+  private get _group(){return this.state.groups.find(g=>g.client_names.includes(this.client.name)||g.member_names.some(n=>this.state.members.some(m=>m.name===n&&m.client_names.includes(this.client.name))))||null;}
   private get _member(){return this.state.members.find(m=>m.client_names.includes(this.client.name))||null;}
-  private get _policies():Policy[]{return this.client.assigned_policy_ids.map(id=>this.state.policies.find(p=>p.id===id)).filter(Boolean) as Policy[];}
-  private _policyActive(p:Policy){const s=p.time_schedule;if(!s)return true;const now=new Date(),day=["sun","mon","tue","wed","thu","fri","sat"][now.getDay()];if(s.days.length&&!s.days.some(d=>d.toLowerCase().startsWith(day)))return false;if(!s.time_from||!s.time_to)return true;const [fh,fm]=s.time_from.split(":").map(Number),[th,tm]=s.time_to.split(":").map(Number),cur=now.getHours()*60+now.getMinutes(),from=fh*60+fm,to=th*60+tm;return from<=to?cur>=from&&cur<to:cur>=from||cur<to;}
+  private get _policies():Policy[]{
+    const ids = new Set<string>(this.client.assigned_policy_ids || []);
+    for (const member of this.state.members) {
+      if (member.client_names.includes(this.client.name)) {
+        for (const id of (member.assigned_policy_ids || [])) ids.add(id);
+      }
+    }
+    for (const group of this.state.groups) {
+      const direct = group.client_names.includes(this.client.name);
+      const viaMember = group.member_names.some(name => this.state.members.some(m => m.name === name && m.client_names.includes(this.client.name)));
+      if (direct || viaMember) {
+        for (const id of (group.assigned_policy_ids || [])) ids.add(id);
+      }
+    }
+    return [...ids].map(id=>this.state.policies.find(p=>p.id===id)).filter(Boolean) as Policy[];
+  }
+  private _policyActive(p:Policy){
+    const s=p.time_schedule;
+    if(!s) return true;
+    const now=new Date(), day=["sun","mon","tue","wed","thu","fri","sat"][now.getDay()];
+    const days=(s.days||[]).map(d=>d.toLowerCase().slice(0,3));
+    if(!s.time_from&&!s.time_to) return !days.length||days.includes(day);
+    const toMin=(v:string)=>{const [h,m]=v.split(":").map(Number);return h*60+m;};
+    const cur=now.getHours()*60+now.getMinutes();
+    if(!s.time_from) return (!days.length||days.includes(day)) && cur<toMin(s.time_to!);
+    if(!s.time_to) return (!days.length||days.includes(day)) && cur>=toMin(s.time_from);
+    const from=toMin(s.time_from),to=toMin(s.time_to);
+    if(from===to) return !days.length||days.includes(day);
+    if(from<to) return (!days.length||days.includes(day)) && cur>=from && cur<to;
+    if(cur>=from) return !days.length||days.includes(day);
+    const order=["mon","tue","wed","thu","fri","sat","sun"], idx=order.indexOf(day);
+    const prev=order[(idx+6)%7];
+    return cur<to && (!days.length||days.includes(prev));
+  }
   private get _activePolicy(){return this._policies.find(p=>this._policyActive(p))||this._policies[0]||null;}
-  private _mode(p:Policy|null){if(!p)return"NORMAL";const a=p.rules.some(r=>r.action==="allow"),b=p.rules.some(r=>r.action==="block");return a&&!b?"ALLOW ONLY":a&&b?"CUSTOM":b?"RESTRICTED":"NORMAL";}
+  private _mode(p:Policy|null){if(!p)return"NORMAL";const a=p.rules.some(r=>r.action==="allow"),b=p.rules.some(r=>r.action==="block");return a&&b?"CUSTOM":a?"ALLOW":b?"RESTRICTED":"NORMAL";}
   private _schedule(p:Policy|null){const s=p?.time_schedule;if(!s)return"All day";return s.time_from&&s.time_to?`${s.time_from} - ${s.time_to}`:"All day";}
   private _days(p:Policy|null){const d=p?.time_schedule?.days;return d?.length?d.map(x=>x.slice(0,3)).join(" · "):"Every day";}
   private _next(p:Policy|null){const s=p?.time_schedule;if(!s?.time_from||!s.time_to)return"—";const now=new Date(),cur=now.getHours()*60+now.getMinutes(),[fh,fm]=s.time_from.split(":").map(Number),[th,tm]=s.time_to.split(":").map(Number),from=fh*60+fm,to=th*60+tm,active=from<=to?cur>=from&&cur<to:cur>=from||cur<to;return active?s.time_to:s.time_from;}

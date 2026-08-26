@@ -38,13 +38,54 @@ class TimeSchedule:
     time_to: str | None  # "HH:MM"
 
     def is_active(self, context: CurrentContext) -> bool:
-        if context.weekday not in self.days:
-            return False
-        if self.time_from and context.time_of_day < self.time_from:
-            return False
-        if self.time_to and context.time_of_day > self.time_to:
-            return False
-        return True
+        """Return whether this schedule is active, including overnight windows."""
+        normalized_days = {str(d).lower()[:3] for d in self.days}
+        if not normalized_days:
+            normalized_days = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
+
+        if not self.time_from and not self.time_to:
+            return context.weekday in normalized_days
+
+        current = _hhmm_to_minutes(context.time_of_day)
+
+        if not self.time_from:
+            # "until HH:MM" applies on the active day.
+            return context.weekday in normalized_days and current < _hhmm_to_minutes(self.time_to)
+
+        if not self.time_to:
+            # "from HH:MM" applies on the active day.
+            return context.weekday in normalized_days and current >= _hhmm_to_minutes(self.time_from)
+
+        start = _hhmm_to_minutes(self.time_from)
+        end = _hhmm_to_minutes(self.time_to)
+
+        if start == end:
+            return context.weekday in normalized_days
+
+        if start < end:
+            return context.weekday in normalized_days and start <= current < end
+
+        # Overnight window, e.g. Mon 21:00 -> 05:00. The post-midnight
+        # segment belongs to the previous schedule day.
+        if current >= start:
+            return context.weekday in normalized_days
+
+        weekday_order = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+        try:
+            idx = weekday_order.index(context.weekday)
+            previous_day = weekday_order[(idx - 1) % 7]
+        except ValueError:
+            previous_day = context.weekday
+        return current < end and previous_day in normalized_days
+
+
+def _hhmm_to_minutes(value: str) -> int:
+    """Convert HH:MM into minutes after midnight."""
+    try:
+        hour, minute = (int(part) for part in value.split(":", 1))
+    except (ValueError, AttributeError):
+        return 0
+    return max(0, min(23, hour)) * 60 + max(0, min(59, minute))
 
 
 @dataclass
@@ -347,6 +388,10 @@ class GlobalState:
                     profile_id=pid.get("profile_id"),
                     rules=[_rule_from_dict(r) for r in pid.get("rules", [])],
                     priority=pid.get("priority", 0),
+                    description=pid.get("description", ""),
+                    enabled=pid.get("enabled", True),
+                    tags=pid.get("tags", []) or [],
+                    exceptions=[_rule_from_dict(r) for r in pid.get("exceptions", [])],
                 )
             )
 

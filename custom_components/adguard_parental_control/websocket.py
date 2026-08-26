@@ -150,6 +150,7 @@ async def ws_profiles_create(
     )
     coordinator.state.profiles.append(profile)
     await coordinator.async_save_state()
+    await coordinator.async_force_sync()
     connection.send_result(msg["id"], _profile_dict(profile))
 
 
@@ -170,6 +171,7 @@ async def ws_profiles_update(
         existing.rules = [_rule_from_dict(r) for r in pd.get("rules", existing.rules)]
         existing.default_action = pd.get("default_action", existing.default_action)
     await coordinator.async_save_state()
+    await coordinator.async_force_sync()
     connection.send_result(msg["id"], _profile_dict(existing) if existing else None)
 
 
@@ -187,6 +189,7 @@ async def ws_profiles_delete(
         p for p in coordinator.state.profiles if p.id != pid
     ]
     await coordinator.async_save_state()
+    await coordinator.async_force_sync()
     connection.send_result(msg["id"], None)
 
 
@@ -223,6 +226,7 @@ async def ws_groups_create(
     )
     coordinator.state.groups.append(group)
     await coordinator.async_save_state()
+    await coordinator.async_force_sync()
     connection.send_result(msg["id"], _group_dict(group))
 
 
@@ -244,6 +248,7 @@ async def ws_groups_update(
         existing.client_names = gd.get("client_names", existing.client_names)
         existing.assigned_policy_ids = gd.get("assigned_policy_ids", existing.assigned_policy_ids)
     await coordinator.async_save_state()
+    await coordinator.async_force_sync()
     connection.send_result(msg["id"], _group_dict(existing) if existing else None)
 
 
@@ -266,6 +271,7 @@ async def ws_groups_assign_policy(
     if policy.id not in group.assigned_policy_ids:
         group.assigned_policy_ids.append(policy.id)
         await coordinator.async_save_state()
+    await coordinator.async_force_sync()
     connection.send_result(msg["id"], _group_dict(group))
 
 
@@ -283,6 +289,7 @@ async def ws_groups_delete(
         g for g in coordinator.state.groups if g.id != gid
     ]
     await coordinator.async_save_state()
+    await coordinator.async_force_sync()
     connection.send_result(msg["id"], None)
 
 
@@ -319,6 +326,7 @@ async def ws_members_create(
     )
     coordinator.state.members.append(member)
     await coordinator.async_save_state()
+    await coordinator.async_force_sync()
     connection.send_result(msg["id"], _member_dict(member))
 
 
@@ -340,6 +348,7 @@ async def ws_members_update(
         existing.assigned_policy_ids = md.get("assigned_policy_ids", existing.assigned_policy_ids)
         existing.exceptions = md.get("exceptions", existing.exceptions)
     await coordinator.async_save_state()
+    await coordinator.async_force_sync()
     connection.send_result(msg["id"], _member_dict(existing) if existing else None)
 
 
@@ -357,6 +366,7 @@ async def ws_members_delete(
         m for m in coordinator.state.members if m.id != mid
     ]
     await coordinator.async_save_state()
+    await coordinator.async_force_sync()
     connection.send_result(msg["id"], None)
 
 
@@ -545,6 +555,7 @@ async def ws_clients_create(
     )
     coordinator.state.clients.append(client)
     await coordinator.async_save_state()
+    await coordinator.async_force_sync()
     connection.send_result(msg["id"], _client_dict(client))
 
 
@@ -565,6 +576,7 @@ async def ws_clients_update(
         existing.assigned_policy_ids = cd.get("assigned_policy_ids", existing.assigned_policy_ids)
         existing.exceptions = cd.get("exceptions", existing.exceptions)
     await coordinator.async_save_state()
+    await coordinator.async_force_sync()
     connection.send_result(msg["id"], _client_dict(existing) if existing else None)
 
 
@@ -582,6 +594,7 @@ async def ws_clients_delete(
         c for c in coordinator.state.clients if c.name != cname
     ]
     await coordinator.async_save_state()
+    await coordinator.async_force_sync()
     connection.send_result(msg["id"], None)
 
 
@@ -612,6 +625,7 @@ async def ws_policies_create(
     policy = _policy_from_dict(pdd)
     coordinator.state.policies.append(policy)
     await coordinator.async_save_state()
+    await coordinator.async_force_sync()
     connection.send_result(msg["id"], _policy_dict(policy))
 
 
@@ -659,6 +673,7 @@ async def ws_policies_update(
             else:
                 existing.calendar_condition = None
     await coordinator.async_save_state()
+    await coordinator.async_force_sync()
     connection.send_result(msg["id"], _policy_dict(existing) if existing else None)
 
 
@@ -676,6 +691,7 @@ async def ws_policies_delete(
         p for p in coordinator.state.policies if p.id != pid
     ]
     await coordinator.async_save_state()
+    await coordinator.async_force_sync()
     connection.send_result(msg["id"], None)
 
 
@@ -760,8 +776,8 @@ async def ws_overrides_set(
         action=OverrideAction(msg["action"]),
         duration_minutes=msg.get("duration_minutes", 30),
     )
-    await coordinator.async_force_sync()
     await coordinator.async_save_state()
+    await coordinator.async_force_sync()
     connection.send_result(msg["id"], override.id)
 
 
@@ -778,8 +794,8 @@ async def ws_overrides_clear(
 ) -> None:
     coordinator = _get_coordinator(hass)
     coordinator.override_manager.clear_override(msg["override_id"])
-    await coordinator.async_force_sync()
     await coordinator.async_save_state()
+    await coordinator.async_force_sync()
     connection.send_result(msg["id"], None)
 
 
