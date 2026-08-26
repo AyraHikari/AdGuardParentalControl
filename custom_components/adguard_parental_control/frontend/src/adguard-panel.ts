@@ -73,7 +73,7 @@ export class AdguardPanel extends LitElement {
         this._selectedPolicy = this._state.policies.find((p: any) => p.id === this._selectedPolicy!.id) || this._selectedPolicy;
       }
       if (this._selectedClient && this._state) {
-        this._selectedClient = this._state.clients.find((c: any) => c.id === this._selectedClient!.id) || this._selectedClient;
+        this._selectedClient = this._state.clients.find((c: any) => c.name === this._selectedClient!.name) || this._selectedClient;
       }
       if (this._selectedGroup && this._state) {
         this._selectedGroup = this._state.groups.find((g: any) => g.id === this._selectedGroup!.id) || this._selectedGroup;
