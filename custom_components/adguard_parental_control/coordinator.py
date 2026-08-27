@@ -142,7 +142,7 @@ class AdGuardParentalControlCoordinator(DataUpdateCoordinator[GlobalState]):
     def _reschedule_time_triggers(self) -> None:
         """Cancel old and schedule new callbacks at policy time boundaries."""
         for h in self._schedule_handles:
-            h.cancel()
+            h()  # async_track_point_in_time returns an unsubscribe callable
         self._schedule_handles.clear()
 
         if self.context_resolver is None:

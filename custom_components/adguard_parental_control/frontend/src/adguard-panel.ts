@@ -57,16 +57,25 @@ export class AdguardPanel extends LitElement {
   private _api: AdguardWebsocketApi | null = null;
 
   updated(changed: PropertyValues) {
-    if (changed.has("hass") && this.hass && !this._api) {
+    if (changed.has("hass") && this.hass) {
+      // Always keep _api on the latest hass reference — HA replaces the
+      // hass object frequently and a stale reference can silently fail.
       this._api = new AdguardWebsocketApi(this.hass);
-      this._loadState();
+      // Fetch state only on first load; subsequent refreshes are driven
+      // by child views via onStateChanged.
+      if (!this._state) {
+        this._loadState();
+      }
     }
   }
 
   private async _loadState() {
     if (!this._api) return;
     try {
-      this._state = await this._api.getState();
+      const fresh = await this._api.getState();
+      // Deep-clone guarantees a brand-new object graph so Lit's
+      // Object.is() change detection always fires.
+      this._state = JSON.parse(JSON.stringify(fresh));
       this._lastSync = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
       // Keep selected entities in sync with fresh state
       if (this._selectedPolicy && this._state) {
